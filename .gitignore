@@ -1,0 +1,6 @@
+# Application-specific files
+.*.log*
+target/
+build/
+__pycache__/
+.venv/
