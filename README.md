@@ -1,5 +1,9 @@
 # Multi-Agent Coding Assistant (MACA)
 
+> [!WARNING]
+> **MACA is currently in active development and is in the ALPHA stage.**
+> You may encounter bugs, breaking changes, or unfinished features.
+
 MACA is a **local-first, hybrid AI coding assistant** that routes work by complexity and coordinates planning, coding, and review agents directly in your workspace.
 
 > **Why it matters:** simple tasks stay on your machine, while more demanding work can use powerful cloud models only when they are truly needed.

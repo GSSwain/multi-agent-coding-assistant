@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "maca-ai"
-version = "1.0.0"
+version = "1.0.0a0"
 description = "MACA: A Multi-Agent Coding Assistant utilizing local Gemma and remote Gemini"
 readme = "README.md"
 requires-python = ">=3.9"

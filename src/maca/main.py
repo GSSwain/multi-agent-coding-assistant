@@ -25,7 +25,7 @@ def display_welcome(orch=None):
         " - [bold magenta]/model <name>[/bold magenta]: Override default model (options: gemma, gemini, auto)\n"
         " - [bold magenta]/help[/bold magenta]: Show this help message"
     )
-    console.print(Panel(welcome_text, title="[bold white]MACA CLI v1.0.0[/bold white]", border_style="cyan"))
+    console.print(Panel(welcome_text, title="[bold white]MACA CLI v1.0.0-alpha[/bold white]", border_style="cyan"))
     
     if orch:
         print_backends_status(orch, run_handshakes=False)
