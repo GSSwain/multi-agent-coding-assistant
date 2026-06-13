@@ -6,7 +6,8 @@ from maca import maca_config as config
 class GeminiClient:
     def __init__(self):
         self.api_key = config.get_gemini_api_key()
-        self.model = "gemini-3.5-flash"
+        self.model = config.GEMINI_MODEL
+        self.timeout = config.GEMINI_TIMEOUT_SECONDS
 
     def generate(self, prompt, system_instruction=""):
         if not self.api_key:
@@ -42,7 +43,7 @@ class GeminiClient:
                 headers={"Content-Type": "application/json"},
                 method="POST"
             )
-            with urllib.request.urlopen(req, timeout=45, context=ssl_context) as response:
+            with urllib.request.urlopen(req, timeout=self.timeout, context=ssl_context) as response:
                 res = json.loads(response.read().decode("utf-8"))
                 # Extract response text
                 candidates = res.get("candidates", [])

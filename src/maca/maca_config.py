@@ -12,6 +12,12 @@ def get_gemini_api_key():
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma2:2b")
 
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
+try:
+    GEMINI_TIMEOUT_SECONDS = float(os.environ.get("GEMINI_TIMEOUT_SECONDS", "45"))
+except ValueError:
+    GEMINI_TIMEOUT_SECONDS = 45.0
+
 # If set to True, will mock Gemma/Gemini calls if unavailable/unconfigured
 MOCK_GEMMA_FALLBACK = os.environ.get("MOCK_GEMMA_FALLBACK", "True").lower() == "true"
 
