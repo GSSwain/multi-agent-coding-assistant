@@ -71,6 +71,12 @@ MACA currently uses Gemini for medium and above tasks. For secure setup details,
   ```bash
   export GEMINI_API_KEY="your-gemini-api-key"
   ```
+  
+  You can optionally customize the Gemini model and request timeout (in seconds):
+  ```bash
+  export GEMINI_MODEL="gemini-3.5-flash"
+  export GEMINI_TIMEOUT_SECONDS="45"
+  ```
 * **Recommended macOS Keychain + .zshenv Setup**:
   ```bash
   security add-generic-password -a "$USER" -s "MACA_GEMINI_API_KEY" -w "your-gemini-key"

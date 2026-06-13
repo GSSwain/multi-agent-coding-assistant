@@ -55,6 +55,19 @@ class BehaviorTests(unittest.TestCase):
         self.assertEqual(result, "CLI response")
         run_mock.assert_called_once()
 
+    def test_gemini_config_uses_maca_config(self):
+        old_model = config.GEMINI_MODEL
+        old_timeout = config.GEMINI_TIMEOUT_SECONDS
+        try:
+            config.GEMINI_MODEL = "gemini-test-model"
+            config.GEMINI_TIMEOUT_SECONDS = 12.5
+            client = GeminiClient()
+            self.assertEqual(client.model, "gemini-test-model")
+            self.assertEqual(client.timeout, 12.5)
+        finally:
+            config.GEMINI_MODEL = old_model
+            config.GEMINI_TIMEOUT_SECONDS = old_timeout
+
 
 if __name__ == "__main__":
     unittest.main()
