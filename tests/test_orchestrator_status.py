@@ -2,6 +2,7 @@ import unittest
 from unittest import mock
 
 from maca.orchestrator import Orchestrator
+from maca import maca_config as config
 
 
 class OrchestratorStatusTests(unittest.TestCase):
@@ -10,7 +11,7 @@ class OrchestratorStatusTests(unittest.TestCase):
 
         fake_response = mock.MagicMock()
         fake_response.__enter__.return_value.status = 200
-        fake_response.__enter__.return_value.read.return_value = b'{}'
+        fake_response.__enter__.return_value.read.return_value = b"{}"
 
         with mock.patch("urllib.request.urlopen", return_value=fake_response) as urlopen_mock, \
              mock.patch("subprocess.run", side_effect=FileNotFoundError("no cli")):
@@ -18,6 +19,18 @@ class OrchestratorStatusTests(unittest.TestCase):
 
         self.assertEqual(status["Gemma"], "ONLINE (Ollama HTTP - gemma2:2b)")
         urlopen_mock.assert_called_once()
+
+    def test_status_shows_claude_unconfigured(self):
+        orch = Orchestrator(".")
+        with mock.patch.object(config, "get_claude_api_key", return_value=""):
+            status = orch.check_backends_status(run_handshakes=False)
+        self.assertEqual(status["Claude"], "UNCONFIGURED (Missing API Key)")
+
+    def test_status_shows_claude_configured(self):
+        orch = Orchestrator(".")
+        with mock.patch.object(config, "get_claude_api_key", return_value="fake_key"):
+            status = orch.check_backends_status(run_handshakes=False)
+        self.assertEqual(status["Claude"], "CONFIGURED (Key Present)")
 
 
 if __name__ == "__main__":

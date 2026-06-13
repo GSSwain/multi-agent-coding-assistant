@@ -18,15 +18,16 @@ def display_welcome(orch=None):
         "[bold cyan]Welcome to the Multi-Agent Coding Assistant (MACA)![/bold cyan]\n"
         "MACA classifies your coding task complexity and routes it to the best model:\n"
         " - [bold green]Simple Complexity[/bold green] -> [bold cyan]Local Gemma[/bold cyan] (via Ollama)\n"
-        " - [bold yellow]Medium/Complex/Very Complex Complexity[/bold yellow] -> [bold cyan]Google Gemini[/bold cyan] (via API)\n\n"
+        " - [bold yellow]Medium Complexity[/bold yellow] -> [bold cyan]Google Gemini[/bold cyan] (via API)\n"
+        " - [bold red]Complex / Very Complex Complexity[/bold red] -> [bold cyan]Anthropic Claude[/bold cyan] (via API)\n\n"
         "Type your task prompt directly, or use special slash commands:\n"
         " - [bold magenta]/exit[/bold magenta] or [bold magenta]/quit[/bold magenta]: Exit the assistant\n"
         " - [bold magenta]/status[/bold magenta]: Run live connection checks on all models\n"
-        " - [bold magenta]/model <name>[/bold magenta]: Override default model (options: gemma, gemini, auto)\n"
+        " - [bold magenta]/model <name>[/bold magenta]: Override default model (options: gemma, gemini, claude, auto)\n"
         " - [bold magenta]/help[/bold magenta]: Show this help message"
     )
     console.print(Panel(welcome_text, title="[bold white]MACA CLI v1.0.0-alpha[/bold white]", border_style="cyan"))
-    
+
     if orch:
         print_backends_status(orch, run_handshakes=False)
 
@@ -34,41 +35,92 @@ def print_backends_status(orch, run_handshakes=False):
     title = "Backend Connectivity (Live Handshakes)" if run_handshakes else "Backend Connectivity (Fast Check)"
     with console.status("[bold yellow]Checking backends...", spinner="dots") if run_handshakes else console.status("[bold yellow]Checking config...", spinner="dots") as s:
         status_dict = orch.check_backends_status(run_handshakes=run_handshakes)
-        
+
     table = Table(title=title)
     table.add_column("Backend Model", style="cyan")
     table.add_column("Connectivity Status", style="magenta")
-    
+
     for name, stat in status_dict.items():
         style_color = "green" if "ONLINE" in stat or "CONFIGURED" in stat else "red"
         if "OFFLINE" in stat:
             style_color = "yellow"
         table.add_row(name, f"[{style_color}]{stat}[/{style_color}]")
-        
+
     console.print(table)
+
+    # Print full error details for any failed connections
+    for name, stat in status_dict.items():
+        if "CONNECTION FAILED" in stat:
+            console.print(f"[bold red]Full Error for {name}:[/bold red]\n{stat}\n")
 
 def contains_filename_or_project(prompt):
     prompt_lower = prompt.lower()
-    
+
     # Check for common extensions
     extensions = [".py", ".js", ".ts", ".html", ".css", ".json", ".md", ".sh", ".java", ".cpp", ".h", ".cs", ".go", ".rs", ".yml", ".yaml", ".txt"]
     if any(ext in prompt_lower for ext in extensions):
         return True
-        
+
     # Clean up punctuation and split
     clean_prompt = prompt_lower.replace(",", " ").replace(".", " ").replace("?", " ").replace("!", " ")
     words = clean_prompt.split()
     keywords = {"file", "project", "folder", "directory", "repo", "repository"}
     if any(w in keywords for w in words):
         return True
-            
+
     return False
+
+def parse_interactive_command(prompt, parser):
+    """Parse a full command line if pasted/entered into the interactive prompt.
+    Returns (task_description, model_override, is_command_line) or (None, None, False)
+    """
+    import shlex
+    prompt_stripped = prompt.strip()
+
+    # Check if the prompt starts with a command invocation prefix
+    prefixes = ["maca ", "./maca ", "python ", "python3 "]
+    starts_with_prefix = any(prompt_stripped.startswith(p) for p in prefixes)
+
+    if not starts_with_prefix:
+        return None, None, False
+
+    try:
+        tokens = shlex.split(prompt_stripped)
+    except Exception:
+        return None, None, False
+
+    if not tokens:
+        return None, None, False
+
+    # Determine where the arguments start
+    start_idx = 0
+    if tokens[0] in ("python", "python3"):
+        if len(tokens) > 1 and (tokens[1].endswith(".py") or "main.py" in tokens[1] or "maca" in tokens[1]):
+            start_idx = 2
+        else:
+            start_idx = 1
+    elif tokens[0] in ("maca", "./maca"):
+        start_idx = 1
+    else:
+        if "maca" in tokens[0]:
+            start_idx = 1
+        else:
+            return None, None, False
+
+    try:
+        sub_args, unknown = parser.parse_known_args(tokens[start_idx:])
+        # If mock flag is specified, apply it globally
+        if getattr(sub_args, "mock", False):
+            config.MOCK_GEMMA_FALLBACK = True
+        return sub_args.task, sub_args.model, True
+    except Exception:
+        return None, None, False
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-Agent Coding Assistant (MACA)")
     parser.add_argument("task", nargs="?", default=None, help="The coding task description")
     parser.add_argument("--repo", default=".", help="Target repository directory path")
-    parser.add_argument("--model", default=None, choices=["gemma", "gemini"], help="Force a specific model")
+    parser.add_argument("--model", default=None, choices=["gemma", "gemini", "claude"], help="Force a specific model")
     parser.add_argument("--mock", action="store_true", help="Force local Gemma simulated mode")
     args = parser.parse_args()
 
@@ -100,7 +152,7 @@ def main():
         with open(test_file, "w") as f:
             f.write("test")
         os.remove(test_file)
-        
+
         console.print("[bold green]✓ Sandbox check: Read/Write access verified successfully.[/bold green]\n")
     except Exception as e:
         config.SANDBOX_READ_ONLY = True
@@ -123,7 +175,7 @@ def main():
                 target = Prompt.ask("[bold yellow]No file name or project specified. Target file/folder name:[/bold yellow]")
                 if target.strip():
                     task_description += f" (Target: {target.strip()})"
-                    
+
             orch.run_task(task_description, model_override=args.model)
         except Exception as e:
             console.print(f"[bold red]Error running task: {e}[/bold red]")
@@ -137,16 +189,16 @@ def main():
         try:
             model_indicator = f" ({model_override})" if model_override else " (auto)"
             prompt = Prompt.ask(f"[bold green]MACA{model_indicator} >[/bold green]")
-            
+
             # Check empty prompt
             if not prompt.strip():
                 continue
-                
+
             # Handle commands
             if prompt.strip().startswith("/"):
                 parts = prompt.strip().split()
                 cmd = parts[0].lower()
-                
+
                 if cmd in ["/exit", "/quit"]:
                     console.print("[bold cyan]Goodbye![/bold cyan]")
                     break
@@ -157,30 +209,42 @@ def main():
                 elif cmd == "/model":
                     if len(parts) > 1:
                         val = parts[1].lower()
-                        if val in ["gemma", "gemini"]:
+                        if val in ["gemma", "gemini", "claude"]:
                             model_override = val
                             console.print(f"[bold green]Model override set to {val.upper()}[/bold green]")
                         elif val == "auto":
                             model_override = None
                             console.print("[bold green]Model routing set to AUTO (based on complexity)[/bold green]")
                         else:
-                            console.print("[bold red]Invalid model. Options: gemma, gemini, auto[/bold red]")
+                            console.print("[bold red]Invalid model. Options: gemma, gemini, claude, auto[/bold red]")
                     else:
-                        console.print("[bold red]Usage: /model <gemma|gemini|auto>[/bold red]")
+                        console.print("[bold red]Usage: /model <gemma|gemini|claude|auto>[/bold red]")
                 else:
                     console.print(f"[bold red]Unknown command: {cmd}[/bold red]")
                 continue
-                
+
+            # Check if it is a full command line pasted/typed in prompt
+            sub_task, sub_model, is_cmd = parse_interactive_command(prompt, parser)
+
+            if is_cmd:
+                if not sub_task or not sub_task.strip():
+                    console.print("[bold red]Error: No task description provided in command line.[/bold red]")
+                    continue
+                task_description = sub_task
+                current_model_override = sub_model if sub_model else model_override
+            else:
+                task_description = prompt
+                current_model_override = model_override
+
             # Check if task description has file name/project folder
-            task_description = prompt
             if not contains_filename_or_project(task_description):
                 target = Prompt.ask("[bold yellow]No file name or project specified. Target file/folder name:[/bold yellow]")
                 if target.strip():
                     task_description += f" (Target: {target.strip()})"
-                    
+
             # Run the task
-            orch.run_task(task_description, model_override=model_override)
-            
+            orch.run_task(task_description, model_override=current_model_override)
+
         except (KeyboardInterrupt, EOFError):
             console.print("\n[bold cyan]Goodbye![/bold cyan]")
             break
