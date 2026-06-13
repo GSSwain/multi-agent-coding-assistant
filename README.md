@@ -18,7 +18,8 @@ MACA is a **local-first, hybrid AI coding assistant** that routes work by comple
 
 - **Smart task routing:** analyzes each request and sends it to the best backend for the job.
   - **Simple tasks:** local Gemma (`gemma2:2b`) via Ollama.
-  - **Medium / complex / very complex tasks:** Google Gemini (`gemini-3.5-flash`) via REST API when a key is configured.
+  - **Medium complexity tasks:** Google Gemini (`gemini-3.5-flash`) via REST API. If Gemini is offline/unconfigured, falls back to Anthropic Claude, then local Gemma.
+  - **Complex / Very Complex tasks:** Anthropic Claude (default `claude-opus-4-8` or custom model) via Messages API. If Claude is offline/unconfigured, falls back to Google Gemini, then local Gemma.
 - **Multi-agent orchestration:** coordinates a planner, coder, and reviewer to work through tasks in sequence.
   - **Planner Agent:** inspects the codebase and creates an implementation plan.
   - **Coder Agent:** writes and applies the actual code changes.
@@ -33,20 +34,34 @@ MACA is a **local-first, hybrid AI coding assistant** that routes work by comple
 ```mermaid
 graph TD
     User([User Prompt]) --> Router[Task Router]
-    Router -->|SIMPLE| Gemma[Local Gemma Client]
-    Router -->|MEDIUM / COMPLEX / VERY_COMPLEX| Gemini[Gemini Client]
-    
-    Gemma & Gemini --> Orchestrator[Multi-Agent Orchestrator]
-    
+    Router -.->|1. Classify Task| Gemma[Local Gemma Client]
+    Gemma -.->|2. Complexity Result| Router
+
+    Router -->|SIMPLE| Gemma
+    Router -->|MEDIUM| Decider1{Backend Availability}
+    Router -->|COMPLEX / VERY_COMPLEX| Decider2{Backend Availability}
+
+    Decider1 -->|Gemini Available| Gemini[Gemini Client]
+    Decider1 -->|Fallback| Claude[Claude Client]
+    Decider1 -->|None Available| Gemma
+
+    Decider2 -->|Claude Available| Claude
+    Decider2 -->|Fallback| Gemini
+    Decider2 -->|None Available| Gemma
+
+    Gemma & Gemini & Claude --> Orchestrator[Multi-Agent Orchestrator]
+
     subgraph Agents
         Orchestrator --> Planner[Planner Agent]
         Planner --> Coder[Coder Agent]
         Coder --> Reviewer[Reviewer Agent]
     end
-    
+
     Reviewer --> Write[File System Writer]
     Write --> Workspace[(Workspace)]
 ```
+
+> **Note on Complexity Classification**: The Task Router queries the local Gemma model (`gemma2:2b`) to classify prompt complexity. If Gemma is offline, it falls back to a regex-based keyword density and word count heuristic classifier.
 
 ---
 
@@ -65,17 +80,21 @@ If you only need the Gemma/Ollama setup, use:
 ```
 
 ### 2. Configure API Keys (Environment or macOS Keychain)
-MACA currently uses Gemini for medium and above tasks. For secure setup details, see [docs/keys_setup.md](docs/keys_setup.md).
+MACA uses Google Gemini and Anthropic Claude for medium and above tasks. For secure setup details, see [docs/keys_setup.md](docs/keys_setup.md).
 
 * **Quick Env Setup**:
   ```bash
   export GEMINI_API_KEY="your-gemini-api-key"
+  export CLAUDE_API_KEY="your-claude-api-key"
   ```
-  
-  You can optionally customize the Gemini model and request timeout (in seconds):
+
+  You can optionally customize the models and request timeouts (in seconds):
   ```bash
   export GEMINI_MODEL="gemini-3.5-flash"
-  export GEMINI_TIMEOUT_SECONDS="45"
+  export GEMINI_TIMEOUT_SECONDS="120"
+
+  export CLAUDE_MODEL="claude-opus-4-8"
+  export CLAUDE_TIMEOUT_SECONDS="120"
   ```
 * **Recommended macOS Keychain + .zshenv Setup**:
   ```bash
@@ -110,6 +129,7 @@ maca "write a simple hello world script in output.py"
 Override default task routing:
 ```sh
 maca --model gemini "implement a custom tokenizer"
+maca --model claude "implement a custom tokenizer"
 ```
 
 ### Run in Mock Mode (Simulated Run)
