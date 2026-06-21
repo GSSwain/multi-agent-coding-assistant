@@ -1,5 +1,5 @@
-import re
 from maca.agents.base import BaseAgent
+
 
 class ReviewerAgent(BaseAgent):
     def __init__(self, model_client):
@@ -29,7 +29,7 @@ class ReviewerAgent(BaseAgent):
     def _build_prompt(self, task_description, generated_files, history):
         history_context = self._format_history(history)
         files_context = self._format_files_context(generated_files)
-        
+
         return (
             f"User Task: {task_description}{history_context}\n\n"
             f"Generated Files to Review:\n{files_context}"
@@ -44,7 +44,7 @@ class ReviewerAgent(BaseAgent):
     def _format_files_context(self, files):
         if not files:
             return ""
-        
+
         formatted_files = ""
         for filepath, content in files.items():
             formatted_files += f"--- FILE: {filepath} ---\n{content}\n\n"

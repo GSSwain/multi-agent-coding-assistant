@@ -1,5 +1,5 @@
-import re
 from maca.agents.base import BaseAgent
+
 
 class CoderAgent(BaseAgent):
     def __init__(self, name, model_client):
@@ -27,7 +27,7 @@ class CoderAgent(BaseAgent):
     def _build_prompt(self, task_description, plan, repo_files_content, history):
         history_context = self._format_history(history)
         files_context = self._format_files_context(repo_files_content)
-        
+
         return (
             f"User Task: {task_description}{history_context}\n\n"
             f"Implementation Plan:\n{plan}\n"
@@ -43,7 +43,7 @@ class CoderAgent(BaseAgent):
     def _format_files_context(self, repo_files_content):
         if not repo_files_content:
             return ""
-        
+
         formatted_files = "\n\nExisting File Contents:\n"
         for filepath, content in repo_files_content.items():
             formatted_files += f"--- FILE: {filepath} ---\n{content}\n\n"

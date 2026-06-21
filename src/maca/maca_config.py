@@ -2,6 +2,7 @@ import os
 
 _gemini_key = None
 
+
 def get_gemini_api_key():
     global _gemini_key
     if _gemini_key is not None:
@@ -9,7 +10,9 @@ def get_gemini_api_key():
     _gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
     return _gemini_key
 
+
 _claude_key = None
+
 
 def get_claude_api_key():
     global _claude_key
@@ -17,6 +20,7 @@ def get_claude_api_key():
         return _claude_key
     _claude_key = os.environ.get("CLAUDE_API_KEY", "").strip()
     return _claude_key
+
 
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma2:2b")
@@ -43,6 +47,7 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
 
 # If set to True, will mock Gemma/Gemini/Claude calls if unavailable/unconfigured
 MOCK_GEMMA_FALLBACK = os.environ.get("MOCK_GEMMA_FALLBACK", "False").lower() == "true"
+
 
 def validate_config(complexity, selected_agent=None):
     """Validate that the selected agent has the required configuration.
@@ -75,5 +80,6 @@ def validate_config(complexity, selected_agent=None):
                 "GEMINI_API_KEY is not set in environment variables. "
                 "Gemini is required for Medium, Complex, and Very Complex tasks."
             )
+
 
 SANDBOX_READ_ONLY = False

@@ -1,19 +1,21 @@
 import unittest
 from unittest import mock
 
+from maca import maca_config as config
 from maca.evaluator import ComplexityEvaluator
-from maca.models.gemini import GeminiClient
 from maca.models.claude import ClaudeClient
+from maca.models.gemini import GeminiClient
 from maca.models.local_gemma import LocalGemmaClient
 from maca.orchestrator import Orchestrator
-from maca import maca_config as config
 
 
 class BehaviorTests(unittest.TestCase):
     def test_heuristic_evaluate_marks_database_task_as_complex(self):
         evaluator = ComplexityEvaluator()
 
-        with mock.patch.object(evaluator.gemma_client, "generate", side_effect=Exception("offline")):
+        with mock.patch.object(
+            evaluator.gemma_client, "generate", side_effect=Exception("offline")
+        ):
             result = evaluator.evaluate("Build a Flask API with SQL database integration")
 
         self.assertEqual(result, "COMPLEX")
@@ -21,7 +23,9 @@ class BehaviorTests(unittest.TestCase):
     def test_heuristic_evaluate_marks_short_prompt_as_simple(self):
         evaluator = ComplexityEvaluator()
 
-        with mock.patch.object(evaluator.gemma_client, "generate", side_effect=Exception("offline")):
+        with mock.patch.object(
+            evaluator.gemma_client, "generate", side_effect=Exception("offline")
+        ):
             result = evaluator.evaluate("Write a hello world script")
 
         self.assertEqual(result, "SIMPLE")
@@ -57,8 +61,10 @@ class BehaviorTests(unittest.TestCase):
 
         fake_http_error = RuntimeError("boom")
 
-        with mock.patch("urllib.request.urlopen", side_effect=fake_http_error), \
-             mock.patch("subprocess.run") as run_mock:
+        with (
+            mock.patch("urllib.request.urlopen", side_effect=fake_http_error),
+            mock.patch("subprocess.run") as run_mock,
+        ):
             run_mock.return_value.returncode = 0
             run_mock.return_value.stdout = "CLI response"
 
@@ -97,13 +103,14 @@ class BehaviorTests(unittest.TestCase):
 
     def test_routing_matrix_medium_both_online(self):
         orch = Orchestrator(".")
-        with mock.patch.object(orch, "_is_gemini_online", return_value=True), \
-             mock.patch.object(orch, "_is_claude_online", return_value=True), \
-             mock.patch.object(orch.evaluator, "evaluate", return_value="MEDIUM"), \
-             mock.patch.object(config, "get_gemini_api_key", return_value="fake_key"), \
-             mock.patch.object(config, "get_claude_api_key", return_value="fake_key"), \
-             mock.patch("maca.orchestrator.PlannerAgent") as mock_planner:
-
+        with (
+            mock.patch.object(orch, "_is_gemini_online", return_value=True),
+            mock.patch.object(orch, "_is_claude_online", return_value=True),
+            mock.patch.object(orch.evaluator, "evaluate", return_value="MEDIUM"),
+            mock.patch.object(config, "get_gemini_api_key", return_value="fake_key"),
+            mock.patch.object(config, "get_claude_api_key", return_value="fake_key"),
+            mock.patch("maca.orchestrator.PlannerAgent") as mock_planner,
+        ):
             mock_planner.side_effect = RuntimeError("abort_task")
             try:
                 orch.run_task("dummy task")
@@ -117,13 +124,14 @@ class BehaviorTests(unittest.TestCase):
 
     def test_routing_matrix_medium_only_claude_online(self):
         orch = Orchestrator(".")
-        with mock.patch.object(orch, "_is_gemini_online", return_value=False), \
-             mock.patch.object(orch, "_is_claude_online", return_value=True), \
-             mock.patch.object(orch.evaluator, "evaluate", return_value="MEDIUM"), \
-             mock.patch.object(config, "get_gemini_api_key", return_value=""), \
-             mock.patch.object(config, "get_claude_api_key", return_value="fake_key"), \
-             mock.patch("maca.orchestrator.PlannerAgent") as mock_planner:
-
+        with (
+            mock.patch.object(orch, "_is_gemini_online", return_value=False),
+            mock.patch.object(orch, "_is_claude_online", return_value=True),
+            mock.patch.object(orch.evaluator, "evaluate", return_value="MEDIUM"),
+            mock.patch.object(config, "get_gemini_api_key", return_value=""),
+            mock.patch.object(config, "get_claude_api_key", return_value="fake_key"),
+            mock.patch("maca.orchestrator.PlannerAgent") as mock_planner,
+        ):
             mock_planner.side_effect = RuntimeError("abort_task")
             try:
                 orch.run_task("dummy task")
@@ -137,13 +145,14 @@ class BehaviorTests(unittest.TestCase):
 
     def test_routing_matrix_complex_both_online(self):
         orch = Orchestrator(".")
-        with mock.patch.object(orch, "_is_gemini_online", return_value=True), \
-             mock.patch.object(orch, "_is_claude_online", return_value=True), \
-             mock.patch.object(orch.evaluator, "evaluate", return_value="COMPLEX"), \
-             mock.patch.object(config, "get_gemini_api_key", return_value="fake_key"), \
-             mock.patch.object(config, "get_claude_api_key", return_value="fake_key"), \
-             mock.patch("maca.orchestrator.PlannerAgent") as mock_planner:
-
+        with (
+            mock.patch.object(orch, "_is_gemini_online", return_value=True),
+            mock.patch.object(orch, "_is_claude_online", return_value=True),
+            mock.patch.object(orch.evaluator, "evaluate", return_value="COMPLEX"),
+            mock.patch.object(config, "get_gemini_api_key", return_value="fake_key"),
+            mock.patch.object(config, "get_claude_api_key", return_value="fake_key"),
+            mock.patch("maca.orchestrator.PlannerAgent") as mock_planner,
+        ):
             mock_planner.side_effect = RuntimeError("abort_task")
             try:
                 orch.run_task("dummy task")
@@ -157,13 +166,14 @@ class BehaviorTests(unittest.TestCase):
 
     def test_routing_matrix_complex_only_gemini_online(self):
         orch = Orchestrator(".")
-        with mock.patch.object(orch, "_is_gemini_online", return_value=True), \
-             mock.patch.object(orch, "_is_claude_online", return_value=False), \
-             mock.patch.object(orch.evaluator, "evaluate", return_value="COMPLEX"), \
-             mock.patch.object(config, "get_gemini_api_key", return_value="fake_key"), \
-             mock.patch.object(config, "get_claude_api_key", return_value=""), \
-             mock.patch("maca.orchestrator.PlannerAgent") as mock_planner:
-
+        with (
+            mock.patch.object(orch, "_is_gemini_online", return_value=True),
+            mock.patch.object(orch, "_is_claude_online", return_value=False),
+            mock.patch.object(orch.evaluator, "evaluate", return_value="COMPLEX"),
+            mock.patch.object(config, "get_gemini_api_key", return_value="fake_key"),
+            mock.patch.object(config, "get_claude_api_key", return_value=""),
+            mock.patch("maca.orchestrator.PlannerAgent") as mock_planner,
+        ):
             mock_planner.side_effect = RuntimeError("abort_task")
             try:
                 orch.run_task("dummy task")
@@ -181,7 +191,7 @@ class BehaviorTests(unittest.TestCase):
         is_done_mock = mock.Mock()
         is_done_mock.side_effect = [
             (False, "Missing step 2 implementation"),
-            (True, "All steps completed successfully")
+            (True, "All steps completed successfully"),
         ]
 
         mock_plan = "1. Step one\n2. Step two"
@@ -189,22 +199,23 @@ class BehaviorTests(unittest.TestCase):
         coder_run_mock = mock.Mock()
         coder_run_mock.side_effect = [
             "Generated content for step 1",
-            "Generated content for step 1 and 2"
+            "Generated content for step 1 and 2",
         ]
 
         reviewer_run_mock = mock.Mock()
         reviewer_run_mock.return_value = "APPROVED"
 
-        with mock.patch.object(orch, "_is_gemini_online", return_value=True), \
-             mock.patch.object(orch, "_is_claude_online", return_value=False), \
-             mock.patch.object(orch.evaluator, "evaluate", return_value="MEDIUM"), \
-             mock.patch.object(config, "get_gemini_api_key", return_value="fake_key"), \
-             mock.patch.object(config, "SANDBOX_READ_ONLY", True), \
-             mock.patch("maca.orchestrator.PlannerAgent") as mock_planner_cls, \
-             mock.patch("maca.orchestrator.CoderAgent") as mock_coder_cls, \
-             mock.patch("maca.orchestrator.ReviewerAgent") as mock_reviewer_cls, \
-             mock.patch.object(orch, "_is_coder_done", is_done_mock):
-
+        with (
+            mock.patch.object(orch, "_is_gemini_online", return_value=True),
+            mock.patch.object(orch, "_is_claude_online", return_value=False),
+            mock.patch.object(orch.evaluator, "evaluate", return_value="MEDIUM"),
+            mock.patch.object(config, "get_gemini_api_key", return_value="fake_key"),
+            mock.patch.object(config, "SANDBOX_READ_ONLY", True),
+            mock.patch("maca.orchestrator.PlannerAgent") as mock_planner_cls,
+            mock.patch("maca.orchestrator.CoderAgent") as mock_coder_cls,
+            mock.patch("maca.orchestrator.ReviewerAgent") as mock_reviewer_cls,
+            mock.patch.object(orch, "_is_coder_done", is_done_mock),
+        ):
             planner_inst = mock_planner_cls.return_value
             planner_inst.list_files.return_value = []
             planner_inst.run.return_value = mock_plan
@@ -213,7 +224,7 @@ class BehaviorTests(unittest.TestCase):
             coder_inst.run = coder_run_mock
             coder_inst.parse_files.side_effect = [
                 {"file1.py": "content1"},
-                {"file1.py": "content1_updated"}
+                {"file1.py": "content1_updated"},
             ]
 
             reviewer_inst = mock_reviewer_cls.return_value
@@ -225,7 +236,10 @@ class BehaviorTests(unittest.TestCase):
             self.assertEqual(coder_run_mock.call_count, 2)
 
             second_call_args = coder_run_mock.call_args_list[1]
-            self.assertIn("Nudge: You have not completed all the steps in the plan", second_call_args[1]["task_description"])
+            self.assertIn(
+                "Nudge: You have not completed all the steps in the plan",
+                second_call_args[1]["task_description"],
+            )
             self.assertIn("Missing step 2 implementation", second_call_args[1]["task_description"])
 
             reviewer_run_mock.assert_called_once()
@@ -236,27 +250,25 @@ class BehaviorTests(unittest.TestCase):
         mock_plan = "1. Step one"
 
         coder_run_mock = mock.Mock()
-        coder_run_mock.side_effect = [
-            "Initial coder response",
-            "Corrected coder response"
-        ]
+        coder_run_mock.side_effect = ["Initial coder response", "Corrected coder response"]
 
         reviewer_run_mock = mock.Mock()
         reviewer_run_mock.side_effect = [
             "Issues found: missing docstring. REJECTED.",
-            "Looks perfect. APPROVED."
+            "Looks perfect. APPROVED.",
         ]
 
-        with mock.patch.object(orch, "_is_gemini_online", return_value=True), \
-             mock.patch.object(orch, "_is_claude_online", return_value=False), \
-             mock.patch.object(orch.evaluator, "evaluate", return_value="MEDIUM"), \
-             mock.patch.object(config, "get_gemini_api_key", return_value="fake_key"), \
-             mock.patch.object(config, "SANDBOX_READ_ONLY", True), \
-             mock.patch("maca.orchestrator.PlannerAgent") as mock_planner_cls, \
-             mock.patch("maca.orchestrator.CoderAgent") as mock_coder_cls, \
-             mock.patch("maca.orchestrator.ReviewerAgent") as mock_reviewer_cls, \
-             mock.patch.object(orch, "_is_coder_done", return_value=(True, "Done")):
-
+        with (
+            mock.patch.object(orch, "_is_gemini_online", return_value=True),
+            mock.patch.object(orch, "_is_claude_online", return_value=False),
+            mock.patch.object(orch.evaluator, "evaluate", return_value="MEDIUM"),
+            mock.patch.object(config, "get_gemini_api_key", return_value="fake_key"),
+            mock.patch.object(config, "SANDBOX_READ_ONLY", True),
+            mock.patch("maca.orchestrator.PlannerAgent") as mock_planner_cls,
+            mock.patch("maca.orchestrator.CoderAgent") as mock_coder_cls,
+            mock.patch("maca.orchestrator.ReviewerAgent") as mock_reviewer_cls,
+            mock.patch.object(orch, "_is_coder_done", return_value=(True, "Done")),
+        ):
             planner_inst = mock_planner_cls.return_value
             planner_inst.list_files.return_value = []
             planner_inst.run.return_value = mock_plan
@@ -265,7 +277,7 @@ class BehaviorTests(unittest.TestCase):
             coder_inst.run = coder_run_mock
             coder_inst.parse_files.side_effect = [
                 {"file1.py": "content1"},
-                {"file1.py": "content1_updated"}
+                {"file1.py": "content1_updated"},
             ]
 
             reviewer_inst = mock_reviewer_cls.return_value
@@ -278,12 +290,16 @@ class BehaviorTests(unittest.TestCase):
             self.assertEqual(reviewer_run_mock.call_count, 2)
 
             second_call_args = coder_run_mock.call_args_list[1]
-            self.assertIn("Nudge: The Reviewer has audited your code and raised issues", second_call_args[1]["task_description"])
+            self.assertIn(
+                "Nudge: The Reviewer has audited your code and raised issues",
+                second_call_args[1]["task_description"],
+            )
             self.assertIn("missing docstring. REJECTED.", second_call_args[1]["task_description"])
 
     def test_interactive_command_line_parsing(self):
-        from maca.main import parse_interactive_command
         import argparse
+
+        from maca.main import parse_interactive_command
 
         parser = argparse.ArgumentParser()
         parser.add_argument("task", nargs="?", default=None)
@@ -291,17 +307,21 @@ class BehaviorTests(unittest.TestCase):
         parser.add_argument("--model", default=None)
         parser.add_argument("--mock", action="store_true")
 
-        task, model, is_cmd = parse_interactive_command('maca --model claude "implement a custom tokenizer"', parser)
+        task, model, is_cmd = parse_interactive_command(
+            'maca --model claude "implement a custom tokenizer"', parser
+        )
         self.assertTrue(is_cmd)
         self.assertEqual(task, "implement a custom tokenizer")
         self.assertEqual(model, "claude")
 
-        task, model, is_cmd = parse_interactive_command('python3 src/maca/main.py --model gemini "do something"', parser)
+        task, model, is_cmd = parse_interactive_command(
+            'python3 src/maca/main.py --model gemini "do something"', parser
+        )
         self.assertTrue(is_cmd)
         self.assertEqual(task, "do something")
         self.assertEqual(model, "gemini")
 
-        task, model, is_cmd = parse_interactive_command('implement a custom tokenizer', parser)
+        task, model, is_cmd = parse_interactive_command("implement a custom tokenizer", parser)
         self.assertFalse(is_cmd)
 
 

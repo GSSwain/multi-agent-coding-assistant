@@ -1,6 +1,7 @@
 import json
-import urllib.request
 import urllib.error
+import urllib.request
+
 from maca import maca_config as config
 
 
@@ -21,9 +22,7 @@ class ClaudeClient:
         payload = {
             "model": self.model,
             "max_tokens": 4096,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
+            "messages": [{"role": "user", "content": prompt}],
         }
 
         if system_instruction:
@@ -37,8 +36,10 @@ class ClaudeClient:
 
         # Setup secure SSL context using certifi if available
         import ssl
+
         try:
             import certifi
+
             ssl_context = ssl.create_default_context(cafile=certifi.where())
         except ImportError:
             ssl_context = ssl.create_default_context()
@@ -82,7 +83,7 @@ class ClaudeClient:
             raise RuntimeError(f"Claude API request failed: {e}")
 
     def _generate_mock(self, prompt, system_instruction):
-        prompt_lower = prompt.lower()
+        # prompt_lower = prompt.lower()
         sys_lower = system_instruction.lower()
 
         if "coder" in sys_lower:

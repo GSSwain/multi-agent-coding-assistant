@@ -1,18 +1,20 @@
 import os
-import sys
-from maca.rich_compat import Console, Panel, Markdown, Table
-from maca.evaluator import ComplexityEvaluator
-from maca.models.local_gemma import LocalGemmaClient
-from maca.models.gemini import GeminiClient
-from maca.models.claude import ClaudeClient
+from typing import Any
+
+from maca import maca_config as config
+from maca.agents.coder import CoderAgent
 
 # Import agents
 from maca.agents.planner import PlannerAgent
-from maca.agents.coder import CoderAgent
 from maca.agents.reviewer import ReviewerAgent
-from maca import maca_config as config
+from maca.evaluator import ComplexityEvaluator
+from maca.models.claude import ClaudeClient
+from maca.models.gemini import GeminiClient
+from maca.models.local_gemma import LocalGemmaClient
+from maca.rich_compat import Console, Markdown, Panel, Table
 
 console = Console()
+
 
 class Orchestrator:
     def __init__(self, repo_path="."):
@@ -87,6 +89,7 @@ class Orchestrator:
     def check_backends_status(self, run_handshakes=False):
         # Checks status of Gemma (Ollama), Gemini and Claude backends.
         status = {}
+        client: Any = None
 
         # 1. Check Gemma
         gemma_url = config.OLLAMA_API_URL
@@ -95,6 +98,7 @@ class Orchestrator:
 
         def _detect_ollama():
             import urllib.request
+
             try:
                 req = urllib.request.Request(f"{gemma_url}/api/tags", method="GET")
                 with urllib.request.urlopen(req, timeout=2) as res:
@@ -104,6 +108,7 @@ class Orchestrator:
                 pass
 
             import subprocess
+
             try:
                 res = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=2)
                 if res.returncode == 0 and res.stdout.strip():
@@ -112,7 +117,9 @@ class Orchestrator:
                 pass
 
             try:
-                res = subprocess.run(["pgrep", "-af", "ollama"], capture_output=True, text=True, timeout=2)
+                res = subprocess.run(
+                    ["pgrep", "-af", "ollama"], capture_output=True, text=True, timeout=2
+                )
                 if res.returncode == 0 and res.stdout.strip():
                     return "ONLINE (Ollama Running - {0})".format(gemma_model)
             except Exception:
@@ -171,21 +178,30 @@ class Orchestrator:
         return status
 
     def run_task(self, task_description, model_override=None):
-        console.print(Panel(f"[bold blue]Multi-Agent Coding Assistant[/bold blue]\n[bold white]Repo Path:[/bold white] {self.repo_path}\n[bold white]Task:[/bold white] {task_description}", border_style="blue"))
+        console.print(
+            Panel(
+                f"[bold blue]Multi-Agent Coding Assistant[/bold blue]\n[bold white]Repo Path:[/bold white] {self.repo_path}\n[bold white]Task:[/bold white] {task_description}",
+                border_style="blue",
+            )
+        )
 
         # 1. Evaluate Complexity
         with console.status("[bold yellow]Evaluating task complexity...", spinner="dots"):
             complexity = self.evaluator.evaluate(task_description)
 
-        console.print(f"[bold green]Task Complexity Evaluated:[/bold green] [bold cyan]{complexity}[/bold cyan]")
+        console.print(
+            f"[bold green]Task Complexity Evaluated:[/bold green] [bold cyan]{complexity}[/bold cyan]"
+        )
 
         # 2. Select Model Client
         model_name = ""
-        client = None
+        client: Any = None
 
         if model_override:
             model_name = model_override.upper()
-            console.print(f"[bold yellow]Model override active:[/bold yellow] [bold cyan]{model_name}[/bold cyan]")
+            console.print(
+                f"[bold yellow]Model override active:[/bold yellow] [bold cyan]{model_name}[/bold cyan]"
+            )
             if model_name.startswith("GEMINI"):
                 client = GeminiClient()
                 config.validate_config(complexity, selected_agent="GEMINI")
@@ -230,21 +246,40 @@ class Orchestrator:
                         client = LocalGemmaClient()
                         config.validate_config(complexity)
 
-        console.print(f"[bold green]Selected Model Client:[/bold green] [bold cyan]{model_name}[/bold cyan]\n")
+        console.print(
+            f"[bold green]Selected Model Client:[/bold green] [bold cyan]{model_name}[/bold cyan]\n"
+        )
 
         # Get existing files in the repo
         planner = PlannerAgent(client)
         repo_files = planner.list_files(self.repo_path)
 
         # 3. Step 1: Planning Agent
-        console.print(Panel("[bold yellow]Step 1: Planner Agent starting...[/bold yellow]", border_style="yellow"))
-        with console.status("[bold yellow]Planner Agent is generating the implementation plan...", spinner="dots"):
+        console.print(
+            Panel(
+                "[bold yellow]Step 1: Planner Agent starting...[/bold yellow]",
+                border_style="yellow",
+            )
+        )
+        with console.status(
+            "[bold yellow]Planner Agent is generating the implementation plan...", spinner="dots"
+        ):
             plan = planner.run(task_description, repo_files, history=self.conversation_history)
 
-        console.print(Panel(Markdown(plan), title="[bold green]Implementation Plan[/bold green]", border_style="green"))
+        console.print(
+            Panel(
+                Markdown(plan),
+                title="[bold green]Implementation Plan[/bold green]",
+                border_style="green",
+            )
+        )
 
         # 4. Step 2: Coder Agent
-        console.print(Panel("[bold yellow]Step 2: Coder Agent starting...[/bold yellow]", border_style="yellow"))
+        console.print(
+            Panel(
+                "[bold yellow]Step 2: Coder Agent starting...[/bold yellow]", border_style="yellow"
+            )
+        )
 
         # Read contents of files mentioned in plan to provide context to Coder if they exist
         repo_files_content = {}
@@ -256,12 +291,18 @@ class Orchestrator:
                     repo_files_content[filepath] = planner.read_file(full_path)
 
         coder = CoderAgent("Coder", client)
-        with console.status("[bold yellow]Coder Agent is implementing the changes...", spinner="dots"):
-            coder_response = coder.run(task_description, plan, repo_files_content, history=self.conversation_history)
+        with console.status(
+            "[bold yellow]Coder Agent is implementing the changes...", spinner="dots"
+        ):
+            coder_response = coder.run(
+                task_description, plan, repo_files_content, history=self.conversation_history
+            )
             generated_files = coder.parse_files(coder_response)
 
         if not generated_files:
-            console.print("[bold red]Warning: Coder did not output any files in the expected format [FILE: path]...[/bold red]")
+            console.print(
+                "[bold red]Warning: Coder did not output any files in the expected format [FILE: path]...[/bold red]"
+            )
             console.print("[yellow]Raw coder response structure check:[/yellow]")
             console.print(coder_response[:500] + "...")
         else:
@@ -272,15 +313,23 @@ class Orchestrator:
         # Coder Verification Loop
         max_nudge_attempts = 10
         for attempt in range(max_nudge_attempts):
-            console.print(f"[bold yellow]Checking if Coder completed all planned steps (Attempt {attempt + 1})...[/bold yellow]")
+            console.print(
+                f"[bold yellow]Checking if Coder completed all planned steps (Attempt {attempt + 1})...[/bold yellow]"
+            )
             is_done, feedback = self._is_coder_done(client, task_description, plan, generated_files)
             if is_done:
-                console.print("[bold green]Coder confirmed all planned tasks are complete![/bold green]")
+                console.print(
+                    "[bold green]Coder confirmed all planned tasks are complete![/bold green]"
+                )
                 break
             else:
-                console.print(f"[bold red]Coder has NOT completed all steps. Feedback:[/bold red]\n{feedback}")
+                console.print(
+                    f"[bold red]Coder has NOT completed all steps. Feedback:[/bold red]\n{feedback}"
+                )
                 if attempt == max_nudge_attempts - 1:
-                    console.print("[bold red]Reached maximum coder nudge attempts. Proceeding to review.[/bold red]")
+                    console.print(
+                        "[bold red]Reached maximum coder nudge attempts. Proceeding to review.[/bold red]"
+                    )
                     break
 
                 # Nudge the Coder to continue
@@ -289,13 +338,17 @@ class Orchestrator:
                     f"{feedback}\n\n"
                     f"Please continue implementing the missing parts and output the complete updated files."
                 )
-                console.print("[bold yellow]Nudging Coder Agent to finish the task...[/bold yellow]")
-                with console.status("[bold yellow]Coder Agent is continuing implementation...", spinner="dots"):
+                console.print(
+                    "[bold yellow]Nudging Coder Agent to finish the task...[/bold yellow]"
+                )
+                with console.status(
+                    "[bold yellow]Coder Agent is continuing implementation...", spinner="dots"
+                ):
                     coder_response = coder.run(
                         task_description=task_description + f"\n\nNudge: {nudge_prompt}",
                         plan=plan,
                         repo_files_content={**repo_files_content, **generated_files},
-                        history=self.conversation_history
+                        history=self.conversation_history,
                     )
                     updated_files = coder.parse_files(coder_response)
                     if updated_files:
@@ -303,17 +356,34 @@ class Orchestrator:
                             generated_files[fp] = content
 
         # 5. Step 3: Reviewer Agent
-        console.print(Panel("[bold yellow]Step 3: Reviewer Agent starting...[/bold yellow]", border_style="yellow"))
+        console.print(
+            Panel(
+                "[bold yellow]Step 3: Reviewer Agent starting...[/bold yellow]",
+                border_style="yellow",
+            )
+        )
         reviewer = ReviewerAgent(client)
 
         max_review_attempts = 10
         for r_attempt in range(max_review_attempts):
-            console.print(f"[bold yellow]Running Reviewer Agent (Attempt {r_attempt + 1})...[/bold yellow]")
-            with console.status("[bold yellow]Reviewer Agent is auditing the generated code...", spinner="dots"):
-                reviewer_response = reviewer.run(task_description, generated_files, history=self.conversation_history)
+            console.print(
+                f"[bold yellow]Running Reviewer Agent (Attempt {r_attempt + 1})...[/bold yellow]"
+            )
+            with console.status(
+                "[bold yellow]Reviewer Agent is auditing the generated code...", spinner="dots"
+            ):
+                reviewer_response = reviewer.run(
+                    task_description, generated_files, history=self.conversation_history
+                )
                 reviewed_files = reviewer.parse_files(reviewer_response)
 
-            console.print(Panel(Markdown(reviewer_response), title=f"[bold green]Reviewer Report (Attempt {r_attempt + 1})[/bold green]", border_style="green"))
+            console.print(
+                Panel(
+                    Markdown(reviewer_response),
+                    title=f"[bold green]Reviewer Report (Attempt {r_attempt + 1})[/bold green]",
+                    border_style="green",
+                )
+            )
 
             is_approved = "APPROVED" in reviewer_response.upper()
 
@@ -325,7 +395,9 @@ class Orchestrator:
                 break
             else:
                 if r_attempt == max_review_attempts - 1:
-                    console.print("[bold red]Reached maximum review attempts. Proceeding to write files.[/bold red]")
+                    console.print(
+                        "[bold red]Reached maximum review attempts. Proceeding to write files.[/bold red]"
+                    )
                     if reviewed_files:
                         for fp, content in reviewed_files.items():
                             generated_files[fp] = content
@@ -338,33 +410,53 @@ class Orchestrator:
                     f"{reviewer_response}\n\n"
                     f"Please address all these issues and output the complete updated files."
                 )
-                console.print("[bold yellow]Nudging Coder Agent to address Reviewer concerns...[/bold yellow]")
-                with console.status("[bold yellow]Coder Agent is applying corrections...", spinner="dots"):
+                console.print(
+                    "[bold yellow]Nudging Coder Agent to address Reviewer concerns...[/bold yellow]"
+                )
+                with console.status(
+                    "[bold yellow]Coder Agent is applying corrections...", spinner="dots"
+                ):
                     coder_response = coder.run(
                         task_description=task_description + f"\n\nNudge: {nudge_prompt}",
                         plan=plan,
                         repo_files_content={**repo_files_content, **generated_files},
-                        history=self.conversation_history
+                        history=self.conversation_history,
                     )
                     updated_files = coder.parse_files(coder_response)
                     if updated_files:
                         for fp, content in updated_files.items():
                             generated_files[fp] = content
 
-
         # 6. Step 4: Writing Changes to Disk
-        console.print(Panel("[bold yellow]Step 4: Writing files to repository...[/bold yellow]", border_style="yellow"))
+        console.print(
+            Panel(
+                "[bold yellow]Step 4: Writing files to repository...[/bold yellow]",
+                border_style="yellow",
+            )
+        )
 
         if config.SANDBOX_READ_ONLY:
-            console.print("[bold red]Sandbox Protection Active: Current directory is read-only. Bypassing writes.[/bold red]")
+            console.print(
+                "[bold red]Sandbox Protection Active: Current directory is read-only. Bypassing writes.[/bold red]"
+            )
             for rel_path, content in generated_files.items():
-                console.print(Panel(content, title=f"[cyan]File Preview: {rel_path}[/cyan] (Read-Only Mode)"))
-            console.print(Panel("[bold yellow]MACA completed the run, but did not write to disk due to sandbox permissions.[/bold yellow]", border_style="yellow"))
+                console.print(
+                    Panel(content, title=f"[cyan]File Preview: {rel_path}[/cyan] (Read-Only Mode)")
+                )
+            console.print(
+                Panel(
+                    "[bold yellow]MACA completed the run, but did not write to disk due to sandbox permissions.[/bold yellow]",
+                    border_style="yellow",
+                )
+            )
 
             # Record dry run summary
             self.conversation_history.append(f"User Request: {task_description}")
             self.conversation_history.append(f"Planner Implementation Steps:\n{plan}")
-            self.conversation_history.append("Files Created/Modified (Dry-Run Preview only): " + ", ".join(generated_files.keys()))
+            self.conversation_history.append(
+                "Files Created/Modified (Dry-Run Preview only): "
+                + ", ".join(generated_files.keys())
+            )
             self.conversation_history.append("Reviewer Decision: APPROVED")
             return
 
@@ -384,7 +476,7 @@ class Orchestrator:
 
             try:
                 common = os.path.commonpath([repo_abs, full_path])
-                is_safe = (common == repo_abs)
+                is_safe = common == repo_abs
             except Exception:
                 is_safe = False
 
@@ -406,15 +498,21 @@ class Orchestrator:
             console.print(table)
 
         if written_count > 0:
-            console.print(f"[bold green]Successfully applied {written_count} changes to the repository![/bold green]")
+            console.print(
+                f"[bold green]Successfully applied {written_count} changes to the repository![/bold green]"
+            )
         else:
             console.print("[bold red]No changes were applied to the repository.[/bold red]")
 
-        console.print(Panel("[bold green]Coding Task Completed successfully![/bold green]", border_style="green"))
+        console.print(
+            Panel(
+                "[bold green]Coding Task Completed successfully![/bold green]", border_style="green"
+            )
+        )
 
         # 7. Record to conversation history
         self.conversation_history.append(f"User Request: {task_description}")
         self.conversation_history.append(f"Planner Implementation Steps:\n{plan}")
         files_written = ", ".join(generated_files.keys()) if written_count > 0 else "None"
         self.conversation_history.append(f"Files Modified/Created: {files_written}")
-        self.conversation_history.append(f"Reviewer Decision: APPROVED")
+        self.conversation_history.append("Reviewer Decision: APPROVED")

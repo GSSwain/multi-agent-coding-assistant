@@ -1,7 +1,9 @@
 import json
-import urllib.request
 import urllib.error
+import urllib.request
+
 from maca import maca_config as config
+
 
 class LocalGemmaClient:
     def __init__(self):
@@ -10,6 +12,7 @@ class LocalGemmaClient:
 
     def generate(self, prompt, system_instruction=""):
         import subprocess
+
         # Combine system instruction and prompt
         full_prompt = prompt
         if system_instruction:
@@ -19,13 +22,11 @@ class LocalGemmaClient:
         try:
             req = urllib.request.Request(
                 f"{self.url}/api/generate",
-                data=json.dumps({
-                    "model": self.model,
-                    "prompt": full_prompt,
-                    "stream": False
-                }).encode("utf-8"),
+                data=json.dumps(
+                    {"model": self.model, "prompt": full_prompt, "stream": False}
+                ).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
-                method="POST"
+                method="POST",
             )
             with urllib.request.urlopen(req, timeout=10) as response:
                 res = json.loads(response.read().decode("utf-8"))
@@ -40,25 +41,25 @@ class LocalGemmaClient:
                     input=full_prompt,
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=30,
                 )
                 if res.returncode == 0:
                     return res.stdout.strip()
             except FileNotFoundError:
                 pass
-            except Exception as sub_e:
+            except Exception:
                 pass
 
             # 3. Try Mock Fallback
             if config.MOCK_GEMMA_FALLBACK:
                 return self._generate_mock(prompt, system_instruction)
-            
+
             raise RuntimeError(f"Failed to connect to local Gemma via Ollama API and CLI: {e}")
 
     def _generate_mock(self, prompt, system_instruction):
-        prompt_lower = prompt.lower()
+        # prompt_lower = prompt.lower()
         sys_lower = system_instruction.lower()
-        
+
         if "coder" in sys_lower:
             return """[FILE: output_gemma.py]
 ```python

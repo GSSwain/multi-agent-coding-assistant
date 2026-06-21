@@ -1,12 +1,13 @@
 import os
 import re
 
+
 class BaseAgent:
     def __init__(self, name, model_client):
         self.name = name
         self.model_client = model_client
 
-    def run(self, prompt, **kwargs):
+    def run(self, *args, **kwargs):
         raise NotImplementedError("Subclasses must implement run()")
 
     # Helper tools available to the orchestrator/agents
@@ -46,7 +47,7 @@ class BaseAgent:
                 if first_line_end != -1:
                     line_content = content[:first_line_end].strip()
                     if line_content.startswith("```"):
-                        content = content[first_line_end + 1:].strip()
+                        content = content[first_line_end + 1 :].strip()
                         cleaned = True
             if content.endswith("```"):
                 content = content[:-3].strip()
@@ -58,7 +59,7 @@ class BaseAgent:
     def parse_files(self, response_text):
         pattern = r"\[FILE:\s*([^\s\]]+)\]\s*(?:\r?\n)*```\w*\s*\n(.*?)\n```"
         matches = re.findall(pattern, response_text, re.DOTALL)
-        
+
         files = {}
         for filepath, content in matches:
             files[filepath.strip()] = self.clean_code_content(content)
