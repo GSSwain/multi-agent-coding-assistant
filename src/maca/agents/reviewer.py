@@ -6,15 +6,12 @@ class ReviewerAgent(BaseAgent):
         super().__init__("Reviewer", model_client)
 
     def run(self, task_description, generated_files, history=None):
-        files_str = ""
-        for filepath, content in generated_files.items():
-            files_str += f"--- FILE: {filepath} ---\n{content}\n\n"
+        system_instruction = self._build_system_instruction()
+        prompt = self._build_prompt(task_description, generated_files, history)
+        return self.model_client.generate(prompt, system_instruction)
 
-        history_str = ""
-        if history:
-            history_str = "\n\nPrevious Conversation History:\n" + "\n".join(history)
-
-        system_instruction = (
+    def _build_system_instruction(self):
+        return (
             "You are a Senior Reviewer Agent. Your job is to review the code generated for the task. "
             "Look for syntax errors, logical bugs, missing imports, or edge cases. "
             "If changes are needed, explain why and output the corrected files.\n\n"
@@ -29,20 +26,26 @@ class ReviewerAgent(BaseAgent):
             "If the code is perfect, output a summary and conclude with the word: APPROVED."
         )
 
-        prompt = (
-            f"User Task: {task_description}{history_str}\n\n"
-            f"Generated Files to Review:\n{files_str}"
+    def _build_prompt(self, task_description, generated_files, history):
+        history_context = self._format_history(history)
+        files_context = self._format_files_context(generated_files)
+        
+        return (
+            f"User Task: {task_description}{history_context}\n\n"
+            f"Generated Files to Review:\n{files_context}"
             "Please review the code, suggest improvements, and output corrected files if needed."
         )
 
-        response = self.model_client.generate(prompt, system_instruction)
-        return response
+    def _format_history(self, history):
+        if not history:
+            return ""
+        return "\n\nPrevious Conversation History:\n" + "\n".join(history)
 
-    def parse_files(self, response_text):
-        pattern = r"\[FILE:\s*([^\s\]]+)\]\s*(?:\r?\n)*```\w*\s*\n(.*?)\n```"
-        matches = re.findall(pattern, response_text, re.DOTALL)
+    def _format_files_context(self, files):
+        if not files:
+            return ""
         
-        files = {}
-        for filepath, content in matches:
-            files[filepath.strip()] = self.clean_code_content(content)
-        return files
+        formatted_files = ""
+        for filepath, content in files.items():
+            formatted_files += f"--- FILE: {filepath} ---\n{content}\n\n"
+        return formatted_files
