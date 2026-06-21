@@ -1,5 +1,5 @@
 import os
-import subprocess
+import re
 
 class BaseAgent:
     def __init__(self, name, model_client):
@@ -54,3 +54,12 @@ class BaseAgent:
             if not cleaned:
                 break
         return content
+
+    def parse_files(self, response_text):
+        pattern = r"\[FILE:\s*([^\s\]]+)\]\s*(?:\r?\n)*```\w*\s*\n(.*?)\n```"
+        matches = re.findall(pattern, response_text, re.DOTALL)
+        
+        files = {}
+        for filepath, content in matches:
+            files[filepath.strip()] = self.clean_code_content(content)
+        return files

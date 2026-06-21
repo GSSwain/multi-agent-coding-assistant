@@ -6,17 +6,12 @@ class CoderAgent(BaseAgent):
         super().__init__(name, model_client)
 
     def run(self, task_description, plan, repo_files_content=None, history=None):
-        files_context = ""
-        if repo_files_content:
-            files_context = "\n\nExisting File Contents:\n"
-            for filepath, content in repo_files_content.items():
-                files_context += f"--- FILE: {filepath} ---\n{content}\n\n"
+        system_instruction = self._build_system_instruction()
+        prompt = self._build_prompt(task_description, plan, repo_files_content, history)
+        return self.model_client.generate(prompt, system_instruction)
 
-        history_str = ""
-        if history:
-            history_str = "\n\nPrevious Conversation History:\n" + "\n".join(history)
-
-        system_instruction = (
+    def _build_system_instruction(self):
+        return (
             "You are a Software Coder Agent. Your job is to implement the changes outlined in the plan.\n\n"
             "CRITICAL: You MUST write the file identifier line in the EXACT format: [FILE: path/to/file.ext]\n"
             "Do NOT use markdown headers (like '## FILE: ...' or '# FILE: ...'), bullet points, or bold text. "
@@ -29,21 +24,27 @@ class CoderAgent(BaseAgent):
             "Make sure to provide the entire, complete contents of the file. Do not use placeholders or ellipsis."
         )
 
-        prompt = (
-            f"User Task: {task_description}{history_str}\n\n"
+    def _build_prompt(self, task_description, plan, repo_files_content, history):
+        history_context = self._format_history(history)
+        files_context = self._format_files_context(repo_files_content)
+        
+        return (
+            f"User Task: {task_description}{history_context}\n\n"
             f"Implementation Plan:\n{plan}\n"
             f"{files_context}\n"
             "Please implement the changes and output the files using the requested [FILE: path] format."
         )
 
-        response = self.model_client.generate(prompt, system_instruction)
-        return response
+    def _format_history(self, history):
+        if not history:
+            return ""
+        return "\n\nPrevious Conversation History:\n" + "\n".join(history)
 
-    def parse_files(self, response_text):
-        pattern = r"\[FILE:\s*([^\s\]]+)\]\s*(?:\r?\n)*```\w*\s*\n(.*?)\n```"
-        matches = re.findall(pattern, response_text, re.DOTALL)
+    def _format_files_context(self, repo_files_content):
+        if not repo_files_content:
+            return ""
         
-        files = {}
-        for filepath, content in matches:
-            files[filepath.strip()] = self.clean_code_content(content)
-        return files
+        formatted_files = "\n\nExisting File Contents:\n"
+        for filepath, content in repo_files_content.items():
+            formatted_files += f"--- FILE: {filepath} ---\n{content}\n\n"
+        return formatted_files
