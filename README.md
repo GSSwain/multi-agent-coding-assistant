@@ -109,6 +109,29 @@ MACA uses Google Gemini and Anthropic Claude for medium and above tasks. For sec
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
+### 4. Development & Static Analysis
+We enforce code quality and security checks on both local builds and CI pipelines:
+- **Ruff**: Code linting and formatting (auto-runs on commit).
+- **Mypy**: Strict type-checking.
+- **Bandit**: Security scanning for potential vulnerabilities.
+
+The `./local/scripts/install_mac.sh` launcher script handles setting these up automatically. It will:
+1. Install all dependencies from `requirements-dev.txt`.
+2. Install **pre-commit** hooks (`pre-commit install`) that auto-fix code style issues on commit.
+3. Run Ruff, Mypy, and Bandit audits locally. If any check fails, the build script exits with a non-zero exit code.
+
+You can also run analysis manually inside your virtual environment:
+```sh
+# Run linter checks
+ruff check src/
+
+# Run type checker
+mypy src/
+
+# Run security checks
+bandit -c pyproject.toml -r src/
+```
+
 ---
 
 ## 💻 How to Use

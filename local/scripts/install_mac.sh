@@ -15,6 +15,28 @@ python -m pip install --upgrade pip setuptools wheel
 python -m pip install hatchling
 python -m pip install -e .
 
+echo "Installing dev dependencies..."
+python -m pip install -r requirements-dev.txt
+
+echo "Setting up pre-commit hooks..."
+pre-commit install
+
+echo "Running static analysis (Ruff, Mypy & Bandit)..."
+if ! ruff check src/; then
+  echo "Build failed: Ruff linting errors found." >&2
+  exit 1
+fi
+
+if ! mypy src/; then
+  echo "Build failed: Mypy type-checking errors found." >&2
+  exit 1
+fi
+
+if ! bandit -c pyproject.toml -r src/; then
+  echo "Build failed: Bandit security issues found." >&2
+  exit 1
+fi
+
 if [ -x "$ROOT_DIR/local/scripts/setup_gemma.sh" ]; then
   "$ROOT_DIR/local/scripts/setup_gemma.sh"
 fi

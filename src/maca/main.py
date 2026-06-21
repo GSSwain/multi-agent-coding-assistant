@@ -1,17 +1,18 @@
+import argparse
 import os
 import sys
-import argparse
 
 # Inject package root directory to allow standalone execution
 package_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if package_root not in sys.path:
     sys.path.append(package_root)
 
-from maca.rich_compat import Console, Panel, Prompt, Table
-from maca import maca_config as config
-from maca.orchestrator import Orchestrator
+from maca import maca_config as config  # noqa: E402
+from maca.orchestrator import Orchestrator  # noqa: E402
+from maca.rich_compat import Console, Panel, Prompt, Table  # noqa: E402
 
 console = Console()
+
 
 def display_welcome(orch=None):
     welcome_text = (
@@ -26,14 +27,29 @@ def display_welcome(orch=None):
         " - [bold magenta]/model <name>[/bold magenta]: Override default model (options: gemma, gemini, claude, auto)\n"
         " - [bold magenta]/help[/bold magenta]: Show this help message"
     )
-    console.print(Panel(welcome_text, title="[bold white]MACA CLI v1.0.0-alpha[/bold white]", border_style="cyan"))
+    console.print(
+        Panel(
+            welcome_text,
+            title="[bold white]MACA CLI v1.0.0-alpha[/bold white]",
+            border_style="cyan",
+        )
+    )
 
     if orch:
         print_backends_status(orch, run_handshakes=False)
 
+
 def print_backends_status(orch, run_handshakes=False):
-    title = "Backend Connectivity (Live Handshakes)" if run_handshakes else "Backend Connectivity (Fast Check)"
-    with console.status("[bold yellow]Checking backends...", spinner="dots") if run_handshakes else console.status("[bold yellow]Checking config...", spinner="dots") as s:
+    title = (
+        "Backend Connectivity (Live Handshakes)"
+        if run_handshakes
+        else "Backend Connectivity (Fast Check)"
+    )
+    with (
+        console.status("[bold yellow]Checking backends...", spinner="dots")
+        if run_handshakes
+        else console.status("[bold yellow]Checking config...", spinner="dots")
+    ):
         status_dict = orch.check_backends_status(run_handshakes=run_handshakes)
 
     table = Table(title=title)
@@ -53,16 +69,37 @@ def print_backends_status(orch, run_handshakes=False):
         if "CONNECTION FAILED" in stat:
             console.print(f"[bold red]Full Error for {name}:[/bold red]\n{stat}\n")
 
+
 def contains_filename_or_project(prompt):
     prompt_lower = prompt.lower()
 
     # Check for common extensions
-    extensions = [".py", ".js", ".ts", ".html", ".css", ".json", ".md", ".sh", ".java", ".cpp", ".h", ".cs", ".go", ".rs", ".yml", ".yaml", ".txt"]
+    extensions = [
+        ".py",
+        ".js",
+        ".ts",
+        ".html",
+        ".css",
+        ".json",
+        ".md",
+        ".sh",
+        ".java",
+        ".cpp",
+        ".h",
+        ".cs",
+        ".go",
+        ".rs",
+        ".yml",
+        ".yaml",
+        ".txt",
+    ]
     if any(ext in prompt_lower for ext in extensions):
         return True
 
     # Clean up punctuation and split
-    clean_prompt = prompt_lower.replace(",", " ").replace(".", " ").replace("?", " ").replace("!", " ")
+    clean_prompt = (
+        prompt_lower.replace(",", " ").replace(".", " ").replace("?", " ").replace("!", " ")
+    )
     words = clean_prompt.split()
     keywords = {"file", "project", "folder", "directory", "repo", "repository"}
     if any(w in keywords for w in words):
@@ -70,11 +107,13 @@ def contains_filename_or_project(prompt):
 
     return False
 
+
 def parse_interactive_command(prompt, parser):
     """Parse a full command line if pasted/entered into the interactive prompt.
     Returns (task_description, model_override, is_command_line) or (None, None, False)
     """
     import shlex
+
     prompt_stripped = prompt.strip()
 
     # Check if the prompt starts with a command invocation prefix
@@ -95,7 +134,9 @@ def parse_interactive_command(prompt, parser):
     # Determine where the arguments start
     start_idx = 0
     if tokens[0] in ("python", "python3"):
-        if len(tokens) > 1 and (tokens[1].endswith(".py") or "main.py" in tokens[1] or "maca" in tokens[1]):
+        if len(tokens) > 1 and (
+            tokens[1].endswith(".py") or "main.py" in tokens[1] or "maca" in tokens[1]
+        ):
             start_idx = 2
         else:
             start_idx = 1
@@ -116,11 +157,17 @@ def parse_interactive_command(prompt, parser):
     except Exception:
         return None, None, False
 
+
 def main():
     parser = argparse.ArgumentParser(description="Multi-Agent Coding Assistant (MACA)")
     parser.add_argument("task", nargs="?", default=None, help="The coding task description")
     parser.add_argument("--repo", default=".", help="Target repository directory path")
-    parser.add_argument("--model", default=None, choices=["gemma", "gemini", "claude"], help="Force a specific model")
+    parser.add_argument(
+        "--model",
+        default=None,
+        choices=["gemma", "gemini", "claude"],
+        help="Force a specific model",
+    )
     parser.add_argument("--mock", action="store_true", help="Force local Gemma simulated mode")
     args = parser.parse_args()
 
@@ -132,9 +179,9 @@ def main():
     # 2. Confirm Access
     try:
         confirm = Prompt.ask(
-            f"[bold yellow]Do you grant MACA permission to access and modify files in this path? (y/n)[/bold yellow]",
+            "[bold yellow]Do you grant MACA permission to access and modify files in this path? (y/n)[/bold yellow]",
             choices=["y", "n"],
-            default="y"
+            default="y",
         )
         if confirm.lower() != "y":
             console.print("[bold red]Access denied by user. Safe exit.[/bold red]")
@@ -153,7 +200,9 @@ def main():
             f.write("test")
         os.remove(test_file)
 
-        console.print("[bold green]✓ Sandbox check: Read/Write access verified successfully.[/bold green]\n")
+        console.print(
+            "[bold green]✓ Sandbox check: Read/Write access verified successfully.[/bold green]\n"
+        )
     except Exception as e:
         config.SANDBOX_READ_ONLY = True
         console.print(
@@ -163,7 +212,9 @@ def main():
 
     if args.mock:
         config.MOCK_GEMMA_FALLBACK = True
-        console.print("[bold yellow]Mock mode forced: Gemma/Gemini will run in simulation mode.[/bold yellow]\n")
+        console.print(
+            "[bold yellow]Mock mode forced: Gemma/Gemini will run in simulation mode.[/bold yellow]\n"
+        )
 
     orch = Orchestrator(args.repo)
 
@@ -172,7 +223,9 @@ def main():
         try:
             task_description = args.task
             if not contains_filename_or_project(task_description):
-                target = Prompt.ask("[bold yellow]No file name or project specified. Target file/folder name:[/bold yellow]")
+                target = Prompt.ask(
+                    "[bold yellow]No file name or project specified. Target file/folder name:[/bold yellow]"
+                )
                 if target.strip():
                     task_description += f" (Target: {target.strip()})"
 
@@ -211,14 +264,22 @@ def main():
                         val = parts[1].lower()
                         if val in ["gemma", "gemini", "claude"]:
                             model_override = val
-                            console.print(f"[bold green]Model override set to {val.upper()}[/bold green]")
+                            console.print(
+                                f"[bold green]Model override set to {val.upper()}[/bold green]"
+                            )
                         elif val == "auto":
                             model_override = None
-                            console.print("[bold green]Model routing set to AUTO (based on complexity)[/bold green]")
+                            console.print(
+                                "[bold green]Model routing set to AUTO (based on complexity)[/bold green]"
+                            )
                         else:
-                            console.print("[bold red]Invalid model. Options: gemma, gemini, claude, auto[/bold red]")
+                            console.print(
+                                "[bold red]Invalid model. Options: gemma, gemini, claude, auto[/bold red]"
+                            )
                     else:
-                        console.print("[bold red]Usage: /model <gemma|gemini|claude|auto>[/bold red]")
+                        console.print(
+                            "[bold red]Usage: /model <gemma|gemini|claude|auto>[/bold red]"
+                        )
                 else:
                     console.print(f"[bold red]Unknown command: {cmd}[/bold red]")
                 continue
@@ -228,7 +289,9 @@ def main():
 
             if is_cmd:
                 if not sub_task or not sub_task.strip():
-                    console.print("[bold red]Error: No task description provided in command line.[/bold red]")
+                    console.print(
+                        "[bold red]Error: No task description provided in command line.[/bold red]"
+                    )
                     continue
                 task_description = sub_task
                 current_model_override = sub_model if sub_model else model_override
@@ -238,7 +301,9 @@ def main():
 
             # Check if task description has file name/project folder
             if not contains_filename_or_project(task_description):
-                target = Prompt.ask("[bold yellow]No file name or project specified. Target file/folder name:[/bold yellow]")
+                target = Prompt.ask(
+                    "[bold yellow]No file name or project specified. Target file/folder name:[/bold yellow]"
+                )
                 if target.strip():
                     task_description += f" (Target: {target.strip()})"
 
@@ -251,6 +316,7 @@ def main():
         except Exception as e:
             console.print(f"[bold red]Error processing request: {e}[/bold red]")
             console.print("[yellow]Continuing session...[/yellow]")
+
 
 if __name__ == "__main__":
     main()
