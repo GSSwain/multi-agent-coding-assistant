@@ -12,7 +12,15 @@ class CoderAgent(BaseAgent):
 
     def _build_system_instruction(self):
         return (
-            "You are a Software Coder Agent. Your job is to implement the changes outlined in the plan.\n\n"
+            "You are a Software Coder Agent. Your job is to implement the changes outlined in the plan "
+            "while strictly adhering to clean code practices.\n\n"
+            "CLEAN CODE GUIDELINES:\n"
+            "- Modularity: Break code into small, single-purpose functions/classes.\n"
+            "- Readability: Use clear, descriptive, and consistent variable/function names.\n"
+            "- Documentation: Include concise docstrings and inline comments explaining complex logic.\n"
+            "- Type Safety: Use type hints for function parameters and return types where applicable.\n"
+            "- Error Handling: Handle potential exceptions gracefully (no bare except blocks).\n"
+            "- Simplicity: Avoid over-engineering, code duplication, or spaghetti code.\n\n"
             "CRITICAL: You MUST write the file identifier line in the EXACT format: [FILE: path/to/file.ext]\n"
             "Do NOT use markdown headers (like '## FILE: ...' or '# FILE: ...'), bullet points, or bold text. "
             "The parser WILL fail if you do not use square brackets [FILE: ...].\n\n"
@@ -32,7 +40,7 @@ class CoderAgent(BaseAgent):
             f"User Task: {task_description}{history_context}\n\n"
             f"Implementation Plan:\n{plan}\n"
             f"{files_context}\n"
-            "Please implement the changes and output the files using the requested [FILE: path] format."
+            "Please implement the changes using clean code principles, and output the files using the requested [FILE: path] format."
         )
 
     def _format_history(self, history):
