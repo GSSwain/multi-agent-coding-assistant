@@ -2,16 +2,17 @@ import os
 from typing import Any
 
 from maca import maca_config as config
-from maca.agents.coder import CoderAgent
+from maca.agents.coder import SimpleCoderAgent, SpecCoderAgent
 
 # Import agents
 from maca.agents.planner import PlannerAgent
 from maca.agents.reviewer import ReviewerAgent
+from maca.agents.spec import SpecAgent
 from maca.evaluator import ComplexityEvaluator
 from maca.models.claude import ClaudeClient
 from maca.models.gemini import GeminiClient
 from maca.models.local_gemma import LocalGemmaClient
-from maca.rich_compat import Console, Markdown, Panel, Table
+from maca.rich_compat import Console, Markdown, Panel, Prompt, Table
 
 console = Console()
 
@@ -22,7 +23,7 @@ class Orchestrator:
         self.evaluator = ComplexityEvaluator()
         self.conversation_history = []
 
-    def _is_coder_done(self, client, task_description, plan, generated_files):
+    def _is_coder_done(self, client, task_description, spec, generated_files):
         """Ask the model if the coder has completed all steps in the plan."""
         if config.MOCK_GEMMA_FALLBACK and not client.api_key:
             return True, "Mock Coder finished."
@@ -32,16 +33,16 @@ class Orchestrator:
             files_str += f"--- FILE: {filepath} ---\n{content}\n\n"
 
         system_instruction = (
-            "You are a Quality Assurance validator. Compare the implementation plan "
+            "You are a Quality Assurance validator. Compare the technical specification "
             "with the generated files to see if all planned tasks/steps are fully completed. "
             "Respond with 'YES' if everything is completely implemented. "
             "Otherwise, respond with 'NO' followed by a detailed list of what is missing."
         )
         prompt = (
             f"Task: {task_description}\n\n"
-            f"Plan:\n{plan}\n\n"
+            f"Specification:\n{spec}\n\n"
             f"Generated Files:\n{files_str}\n\n"
-            "Are all steps in the plan completely implemented? (Start your response with YES or NO)"
+            "Are all steps in the specification completely implemented? (Start your response with YES or NO)"
         )
         try:
             response = client.generate(prompt, system_instruction).strip()
@@ -251,7 +252,7 @@ class Orchestrator:
         )
 
         # Get existing files in the repo
-        planner = PlannerAgent(client)
+        planner = PlannerAgent(client, repo_path=self.repo_path)
         repo_files = planner.list_files(self.repo_path)
 
         # 3. Step 1: Planning Agent
@@ -274,6 +275,61 @@ class Orchestrator:
             )
         )
 
+        # Write Plan to .maca/plan-<task>.md
+        safe_task_name = (
+            "".join(c if c.isalnum() else "-" for c in task_description[:30]).strip("-").lower()
+        )
+        maca_dir = os.path.join(self.repo_path, ".maca")
+        os.makedirs(maca_dir, exist_ok=True)
+        plan_file = os.path.join(maca_dir, f"plan-{safe_task_name}.md")
+        planner.write_file(plan_file, plan)
+        console.print(f"[bold green]Plan saved to {plan_file}[/bold green]")
+
+        # 3.5. Step 1.5: Spec Agent
+        if complexity == "SIMPLE":
+            console.print(
+                Panel(
+                    "[bold yellow]Step 1.5: Spec Agent skipped for SIMPLE task...[/bold yellow]",
+                    border_style="yellow",
+                )
+            )
+            spec = plan
+        else:
+            console.print(
+                Panel(
+                    "[bold yellow]Step 1.5: Spec Agent starting...[/bold yellow]",
+                    border_style="yellow",
+                )
+            )
+            spec_agent = SpecAgent(client, repo_path=self.repo_path)
+            with console.status(
+                "[bold yellow]Spec Agent is generating the technical specification...",
+                spinner="dots",
+            ):
+                spec = spec_agent.run(task_description, plan, history=self.conversation_history)
+
+            console.print(
+                Panel(
+                    Markdown(spec),
+                    title="[bold green]Technical Specification[/bold green]",
+                    border_style="green",
+                )
+            )
+            spec_file = os.path.join(maca_dir, f"spec-{safe_task_name}.md")
+            spec_agent.write_file(spec_file, spec)
+            console.print(f"[bold green]Spec saved to {spec_file}[/bold green]")
+
+            # Interactive Pause
+            user_input = Prompt.ask(
+                f"\n[bold yellow]Spec is ready for review at .maca/spec-{safe_task_name}.md[/bold yellow]\n[cyan]Modify it if needed. Press Enter to approve and continue, or type '/cancel' to abort[/cyan]"
+            )
+            if user_input.strip().lower() == "/cancel":
+                console.print("[bold red]Task cancelled by user.[/bold red]")
+                return
+
+            # Re-read the spec in case the user modified it
+            spec = spec_agent.read_file(spec_file)
+
         # 4. Step 2: Coder Agent
         console.print(
             Panel(
@@ -281,22 +337,31 @@ class Orchestrator:
             )
         )
 
-        # Read contents of files mentioned in plan to provide context to Coder if they exist
+        # Read contents of files mentioned in spec to provide context to Coder if they exist
         repo_files_content = {}
         for filepath in repo_files:
-            # Check if planner plan mentions the file
-            if filepath.lower() in plan.lower():
+            if filepath.lower() in spec.lower() or filepath.lower() in plan.lower():
                 full_path = os.path.join(self.repo_path, filepath)
                 if os.path.exists(full_path):
                     repo_files_content[filepath] = planner.read_file(full_path)
 
-        coder = CoderAgent("Coder", client)
-        with console.status(
-            "[bold yellow]Coder Agent is implementing the changes...", spinner="dots"
-        ):
-            coder_response = coder.run(
-                task_description, plan, repo_files_content, history=self.conversation_history
-            )
+        coder: Any
+        if complexity == "SIMPLE":
+            coder = SimpleCoderAgent("SimpleCoder", client, repo_path=self.repo_path)
+            with console.status(
+                "[bold yellow]Simple Coder Agent is implementing the plan...", spinner="dots"
+            ):
+                coder_response = coder.run(
+                    task_description, plan, repo_files_content, history=self.conversation_history
+                )
+        else:
+            coder = SpecCoderAgent("SpecCoder", client, repo_path=self.repo_path)
+            with console.status(
+                "[bold yellow]Spec Coder Agent is implementing the specification...", spinner="dots"
+            ):
+                coder_response = coder.run(
+                    task_description, spec, repo_files_content, history=self.conversation_history
+                )
             generated_files = coder.parse_files(coder_response)
 
         if not generated_files:
@@ -316,7 +381,7 @@ class Orchestrator:
             console.print(
                 f"[bold yellow]Checking if Coder completed all planned steps (Attempt {attempt + 1})...[/bold yellow]"
             )
-            is_done, feedback = self._is_coder_done(client, task_description, plan, generated_files)
+            is_done, feedback = self._is_coder_done(client, task_description, spec, generated_files)
             if is_done:
                 console.print(
                     "[bold green]Coder confirmed all planned tasks are complete![/bold green]"
@@ -344,12 +409,20 @@ class Orchestrator:
                 with console.status(
                     "[bold yellow]Coder Agent is continuing implementation...", spinner="dots"
                 ):
-                    coder_response = coder.run(
-                        task_description=task_description + f"\n\nNudge: {nudge_prompt}",
-                        plan=plan,
-                        repo_files_content={**repo_files_content, **generated_files},
-                        history=self.conversation_history,
-                    )
+                    if complexity == "SIMPLE":
+                        coder_response = coder.run(
+                            task_description=task_description + f"\n\nNudge: {nudge_prompt}",
+                            plan=plan,
+                            repo_files_content={**repo_files_content, **generated_files},
+                            history=self.conversation_history,
+                        )
+                    else:
+                        coder_response = coder.run(
+                            task_description=task_description + f"\n\nNudge: {nudge_prompt}",
+                            spec=spec,
+                            repo_files_content={**repo_files_content, **generated_files},
+                            history=self.conversation_history,
+                        )
                     updated_files = coder.parse_files(coder_response)
                     if updated_files:
                         for fp, content in updated_files.items():
@@ -362,7 +435,7 @@ class Orchestrator:
                 border_style="yellow",
             )
         )
-        reviewer = ReviewerAgent(client)
+        reviewer = ReviewerAgent(client, repo_path=self.repo_path)
 
         max_review_attempts = 10
         for r_attempt in range(max_review_attempts):
@@ -373,7 +446,10 @@ class Orchestrator:
                 "[bold yellow]Reviewer Agent is auditing the generated code...", spinner="dots"
             ):
                 reviewer_response = reviewer.run(
-                    task_description, generated_files, history=self.conversation_history
+                    task_description,
+                    generated_files,
+                    history=self.conversation_history,
+                    plan_or_spec=spec,
                 )
                 reviewed_files = reviewer.parse_files(reviewer_response)
 
@@ -385,7 +461,7 @@ class Orchestrator:
                 )
             )
 
-            is_approved = "APPROVED" in reviewer_response.upper()
+            is_approved = reviewer.is_approved(reviewer_response)
 
             if is_approved:
                 if reviewed_files:
@@ -416,12 +492,20 @@ class Orchestrator:
                 with console.status(
                     "[bold yellow]Coder Agent is applying corrections...", spinner="dots"
                 ):
-                    coder_response = coder.run(
-                        task_description=task_description + f"\n\nNudge: {nudge_prompt}",
-                        plan=plan,
-                        repo_files_content={**repo_files_content, **generated_files},
-                        history=self.conversation_history,
-                    )
+                    if complexity == "SIMPLE":
+                        coder_response = coder.run(
+                            task_description=task_description + f"\n\nNudge: {nudge_prompt}",
+                            plan=plan,
+                            repo_files_content={**repo_files_content, **generated_files},
+                            history=self.conversation_history,
+                        )
+                    else:
+                        coder_response = coder.run(
+                            task_description=task_description + f"\n\nNudge: {nudge_prompt}",
+                            spec=spec,
+                            repo_files_content={**repo_files_content, **generated_files},
+                            history=self.conversation_history,
+                        )
                     updated_files = coder.parse_files(coder_response)
                     if updated_files:
                         for fp, content in updated_files.items():
