@@ -51,21 +51,68 @@ graph TD
 
     Gemma & Gemini & Claude --> Orchestrator[Multi-Agent Orchestrator]
 
-    subgraph Agents
+    subgraph Agents Layer
         Orchestrator --> Planner[Planner Agent]
-        Planner --> Coder[Coder Agent]
-        Coder --> Reviewer[Reviewer Agent]
+        Planner --> SpecDecider{Is SIMPLE task?}
+        
+        SpecDecider -->|Yes| SimpleCoder[Simple Coder Agent]
+        SpecDecider -->|No| SpecAgent[Spec Agent]
+        
+        SpecAgent --> UserReview[User Review & Approval]
+        UserReview -->|Modify/Approve| SpecCoder[Spec Coder Agent]
+        
+        SimpleCoder & SpecCoder --> Reviewer[Reviewer Agent]
     end
 
-    Reviewer --> Write[File System Writer]
+    Reviewer -->|Approved| Write[File System Writer]
+    Reviewer -->|Rejected| ReCoder[Nudge Coder to fix]
+    ReCoder --> SimpleCoder & SpecCoder
     Write --> Workspace[(Workspace)]
 ```
 
-> **Note on Complexity Classification**: The Task Router queries the local Gemma model (`gemma2:2b`) to classify prompt complexity. If Gemma is offline, it falls back to a regex-based keyword density and word count heuristic classifier.
+### 1. How Task Routing Works
+
+MACA evaluates task complexity before selecting a model to execute the coding assignment:
+- **Complexity Assessment**:
+  - The **Task Router** queries the local Gemma model (gemma2:2b via Ollama) to analyze the user prompt and classify it into one of four categories: SIMPLE, MEDIUM, COMPLEX, or VERY_COMPLEX.
+  - *Fallback Heuristic*: If Gemma/Ollama is offline, the router falls back to a regex-based keyword density and word count heuristic classifier to make a prediction.
+- **Model Assignment & Fallbacks**:
+  - **SIMPLE Tasks**: Handled entirely locally by the **Local Gemma Client** to minimize latency and token usage.
+  - **MEDIUM Tasks**: Routed preferentially to **Gemini Client** (Flash/Pro) for rapid, intelligent processing. If Gemini is configured but offline, it falls back to **Claude Client** (or local Gemma if no remote APIs are online).
+  - **COMPLEX or VERY_COMPLEX Tasks**: Routed preferentially to **Claude Client** (Opus/Sonnet) for advanced reasoning. If Claude is configured but offline, it falls back to **Gemini Client** (or local Gemma if necessary).
 
 ---
 
-## 🛠️ Setup Instructions
+### 2. How Agents Collaborate
+
+Once a model client has been assigned, the **Multi-Agent Orchestrator** manages the coding pipeline using a suite of dedicated, specialized agents:
+
+1. **Planner Agent**:
+   - Analyzes the task description and list of files in the workspace.
+   - Generates a structured Markdown implementation plan specifying the files to create or modify.
+   - Saves the plan to .maca/plan-<task>.md.
+
+2. **Complexity Routing**:
+   - **For SIMPLE Tasks**: Bypasses the specification phase entirely. The orchestrator routes the task directly to the **Simple Coder Agent**, which implements the modifications based solely on the plan.
+   - **For MEDIUM/COMPLEX Tasks**: The orchestrator routes the task to the **Spec Agent** first.
+
+3. **Spec Agent (Spec Flow)**:
+   - Generates a detailed **Technical Specification** document from the plan.
+   - Saves it to .maca/spec-<task>.md.
+   - **Interactive User Review**: The CLI pauses execution, alerting the user that the specification is ready for review. The user can open .maca/spec-<task>.md, modify it to add constraints or adjust design, and then hit Enter to approve and continue. If the user types /cancel, the task is cleanly aborted.
+   - Once approved, the orchestrator loads the specification and routes it to the **Spec Coder Agent**.
+
+4. **Coder Agents**:
+   - Implements code changes based on either the plan (SimpleCoderAgent) or the technical specification (SpecCoderAgent). Both coder agents strictly enforce **Clean Code Guidelines** (modularity, variable naming, error handling, and type annotations).
+   - Generates file content blocks parsed via [FILE: path].
+   - *Verification Loop*: The orchestrator runs a QA check. If the code is incomplete compared to the specification or plan, it nudges the coder with feedback to continue implementation.
+
+5. **Reviewer Agent**:
+   - Audits the coder output against **Clean Code Auditing Criteria** (readability, modularity, single responsibility, type safety, and correctness) and the original plan or specification (if available).
+   - **Approval & Verification**:
+     - If the code meets quality standards, it outputs APPROVED, and the orchestrator writes the changes to the disk.
+     - If not, it rejects the code, outputs a detailed feedback report, and nudges the coder to apply corrections. The loop repeats until approved (up to 10 attempts).
+\n\n## 🛠️ Setup Instructions
 
 ### 1. Install and run the CLI
 Use the local launcher scripts under [local/scripts](local/scripts):

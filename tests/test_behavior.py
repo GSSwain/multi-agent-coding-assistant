@@ -212,13 +212,19 @@ class BehaviorTests(unittest.TestCase):
             mock.patch.object(config, "get_gemini_api_key", return_value="fake_key"),
             mock.patch.object(config, "SANDBOX_READ_ONLY", True),
             mock.patch("maca.orchestrator.PlannerAgent") as mock_planner_cls,
-            mock.patch("maca.orchestrator.CoderAgent") as mock_coder_cls,
+            mock.patch("maca.orchestrator.SpecAgent") as mock_spec_cls,
+            mock.patch("maca.orchestrator.Prompt.ask", return_value=""),
+            mock.patch("maca.orchestrator.SpecCoderAgent") as mock_coder_cls,
             mock.patch("maca.orchestrator.ReviewerAgent") as mock_reviewer_cls,
             mock.patch.object(orch, "_is_coder_done", is_done_mock),
         ):
             planner_inst = mock_planner_cls.return_value
             planner_inst.list_files.return_value = []
             planner_inst.run.return_value = mock_plan
+
+            spec_inst = mock_spec_cls.return_value
+            spec_inst.run.return_value = "Mock Spec"
+            spec_inst.read_file.return_value = "Mock Spec"
 
             coder_inst = mock_coder_cls.return_value
             coder_inst.run = coder_run_mock
@@ -230,6 +236,7 @@ class BehaviorTests(unittest.TestCase):
             reviewer_inst = mock_reviewer_cls.return_value
             reviewer_inst.run = reviewer_run_mock
             reviewer_inst.parse_files.return_value = {}
+            reviewer_inst.is_approved.side_effect = lambda x: "APPROVED" in x.upper()
 
             orch.run_task("Implement task")
 
@@ -265,13 +272,19 @@ class BehaviorTests(unittest.TestCase):
             mock.patch.object(config, "get_gemini_api_key", return_value="fake_key"),
             mock.patch.object(config, "SANDBOX_READ_ONLY", True),
             mock.patch("maca.orchestrator.PlannerAgent") as mock_planner_cls,
-            mock.patch("maca.orchestrator.CoderAgent") as mock_coder_cls,
+            mock.patch("maca.orchestrator.SpecAgent") as mock_spec_cls,
+            mock.patch("maca.orchestrator.Prompt.ask", return_value=""),
+            mock.patch("maca.orchestrator.SpecCoderAgent") as mock_coder_cls,
             mock.patch("maca.orchestrator.ReviewerAgent") as mock_reviewer_cls,
             mock.patch.object(orch, "_is_coder_done", return_value=(True, "Done")),
         ):
             planner_inst = mock_planner_cls.return_value
             planner_inst.list_files.return_value = []
             planner_inst.run.return_value = mock_plan
+
+            spec_inst = mock_spec_cls.return_value
+            spec_inst.run.return_value = "Mock Spec"
+            spec_inst.read_file.return_value = "Mock Spec"
 
             coder_inst = mock_coder_cls.return_value
             coder_inst.run = coder_run_mock
@@ -283,6 +296,7 @@ class BehaviorTests(unittest.TestCase):
             reviewer_inst = mock_reviewer_cls.return_value
             reviewer_inst.run = reviewer_run_mock
             reviewer_inst.parse_files.return_value = {}
+            reviewer_inst.is_approved.side_effect = lambda x: "APPROVED" in x.upper()
 
             orch.run_task("Implement task")
 

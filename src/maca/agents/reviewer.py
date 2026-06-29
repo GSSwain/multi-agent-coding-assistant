@@ -1,16 +1,13 @@
+from typing import Any, Dict, List, Optional
+
 from maca.agents.base import BaseAgent
 
 
 class ReviewerAgent(BaseAgent):
-    def __init__(self, model_client):
-        super().__init__("Reviewer", model_client)
+    def __init__(self, model_client: Any, repo_path: str = "."):
+        super().__init__("Reviewer", model_client, repo_path=repo_path)
 
-    def run(self, task_description, generated_files, history=None):
-        system_instruction = self._build_system_instruction()
-        prompt = self._build_prompt(task_description, generated_files, history)
-        return self.model_client.generate(prompt, system_instruction)
-
-    def _build_system_instruction(self):
+    def _build_system_instruction(self, *args: Any, **kwargs: Any) -> str:
         return (
             "You are a Senior Reviewer Agent. Your job is to review the code generated for the task "
             "with a strict focus on clean code practices and technical correctness.\n\n"
@@ -32,27 +29,39 @@ class ReviewerAgent(BaseAgent):
             "If the code is perfect, output a summary and conclude with the word: APPROVED."
         )
 
-    def _build_prompt(self, task_description, generated_files, history):
+    def _build_prompt(
+        self,
+        task_description: str,
+        generated_files: Dict[str, str],
+        history: Optional[List[str]] = None,
+        plan_or_spec: Optional[str] = None,
+    ) -> str:
         history_context = self._format_history(history)
         files_context = self._format_files_context(generated_files)
+        spec_context = ""
+        if plan_or_spec:
+            spec_context = f"\n\nImplementation Plan/Specification:\n{plan_or_spec}"
 
         return (
-            f"User Task: {task_description}{history_context}\n\n"
+            f"User Task: {task_description}{history_context}{spec_context}\n\n"
             f"Generated Files to Review:\n{files_context}"
             "Please review the code for correctness, logical bugs, and clean code practices. "
             "Suggest improvements and output corrected files if needed."
         )
 
-    def _format_history(self, history):
+    def _format_history(self, history: Optional[List[str]]) -> str:
         if not history:
             return ""
         return "\n\nPrevious Conversation History:\n" + "\n".join(history)
 
-    def _format_files_context(self, files):
+    def _format_files_context(self, files: Dict[str, str]) -> str:
         if not files:
             return ""
-
         formatted_files = ""
         for filepath, content in files.items():
             formatted_files += f"--- FILE: {filepath} ---\n{content}\n\n"
         return formatted_files
+
+    def is_approved(self, response_text: str) -> bool:
+        """Parses the reviewer response and determines if the implementation is approved."""
+        return "APPROVED" in response_text.upper()
