@@ -112,7 +112,9 @@ Once a model client has been assigned, the **Multi-Agent Orchestrator** manages 
    - **Approval & Verification**:
      - If the code meets quality standards, it outputs APPROVED, and the orchestrator writes the changes to the disk.
      - If not, it rejects the code, outputs a detailed feedback report, and nudges the coder to apply corrections. The loop repeats until approved (up to 10 attempts).
-\n\n## 🛠️ Setup Instructions
+
+
+## 🛠️ Setup Instructions
 
 ### 1. Install and run the CLI
 Use the local launcher scripts under [local/scripts](local/scripts):
