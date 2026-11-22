@@ -5,10 +5,42 @@ from typing import Any, Dict, List, Optional
 
 
 class BaseAgent(abc.ABC):
-    def __init__(self, name: str, model_client: Any, repo_path: str = "."):
+    def __init__(
+        self,
+        name: str,
+        model_client: Any,
+        repo_path: str = ".",
+        allowed_directory: Optional[str] = None,
+    ):
         self.name = name
         self.model_client = model_client
         self.repo_path = os.path.abspath(repo_path)
+        self.allowed_directory = allowed_directory or "."
+
+    @property
+    def abs_allowed_directory(self) -> str:
+        """Returns the absolute path of the allowed directory."""
+        if os.path.isabs(self.allowed_directory):
+            return os.path.abspath(self.allowed_directory)
+        return os.path.abspath(os.path.join(self.repo_path, self.allowed_directory))
+
+    def is_path_in_workspace(self, file_path: str) -> bool:
+        """Validates that a resolved path resides strictly inside the workspace repository root."""
+        abs_path = os.path.abspath(os.path.join(self.repo_path, file_path))
+        return self._is_path_safe(abs_path)
+
+    def is_path_under_allowed_directory(self, file_path: str) -> bool:
+        """Validates that a resolved path resides strictly inside the allowed directory for reading."""
+        abs_path = os.path.abspath(os.path.join(self.repo_path, file_path))
+        if not self._is_path_safe(abs_path):
+            return False
+        try:
+            real_allowed = os.path.realpath(self.abs_allowed_directory)
+            real_path = os.path.realpath(abs_path)
+            common = os.path.commonpath([real_allowed, real_path])
+            return common == real_allowed
+        except Exception:
+            return False
 
     @abc.abstractmethod
     def _build_system_instruction(self, *args: Any, **kwargs: Any) -> str:
@@ -34,13 +66,15 @@ class BaseAgent(abc.ABC):
     def _is_path_safe(self, abs_path: str) -> bool:
         """Validates that a resolved path resides inside the repository root."""
         try:
-            common = os.path.commonpath([self.repo_path, abs_path])
-            return common == self.repo_path
+            real_repo = os.path.realpath(self.repo_path)
+            real_path = os.path.realpath(abs_path)
+            common = os.path.commonpath([real_repo, real_path])
+            return common == real_repo
         except Exception:
             return False
 
     def list_files(self, repo_path: Optional[str] = None) -> List[str]:
-        target_path = os.path.abspath(repo_path) if repo_path else self.repo_path
+        target_path = os.path.abspath(repo_path) if repo_path else self.abs_allowed_directory
         if not self._is_path_safe(target_path):
             return []
 
@@ -58,6 +92,11 @@ class BaseAgent(abc.ABC):
         abs_path = os.path.abspath(os.path.join(self.repo_path, file_path))
         if not self._is_path_safe(abs_path):
             return f"Error: Path {file_path} escapes repository root {self.repo_path}"
+        rel_clean = os.path.relpath(abs_path, self.repo_path)
+        if not rel_clean.startswith(".maca") and not self.is_path_under_allowed_directory(
+            file_path
+        ):
+            return f"Error: Path {file_path} is outside allowed directory {self.allowed_directory}"
         try:
             with open(abs_path, "r", encoding="utf-8") as f:
                 return f.read()

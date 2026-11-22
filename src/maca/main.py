@@ -25,6 +25,7 @@ def display_welcome(orch=None):
         " - [bold magenta]/exit[/bold magenta] or [bold magenta]/quit[/bold magenta]: Exit the assistant\n"
         " - [bold magenta]/status[/bold magenta]: Run live connection checks on all models\n"
         " - [bold magenta]/model <name>[/bold magenta]: Override default model (options: gemma, gemini, claude, auto)\n"
+        " - [bold magenta]/clean[/bold magenta]: Clean up staging directories under .maca/\n"
         " - [bold magenta]/help[/bold magenta]: Show this help message"
     )
     console.print(
@@ -108,6 +109,37 @@ def contains_filename_or_project(prompt):
     return False
 
 
+def _apply_target_input(orch, task_description: str, target_input: str):
+    """Resolve user-supplied target file or folder name.
+
+    If target_input is a directory/folder path (no file extension), creates the folder
+    and returns an Orchestrator scoped to that target directory.
+    If target_input is a file name (has extension), appends (Target: <file>) to task_description.
+    """
+    target_clean = target_input.strip()
+    if not target_clean:
+        return orch, task_description
+
+    _, ext = os.path.splitext(target_clean.rstrip("/\\"))
+    is_dir_target = (
+        not ext
+        or target_clean.endswith(("/", "\\"))
+        or os.path.isdir(os.path.abspath(os.path.join(orch.repo_path, target_clean)))
+    )
+    if is_dir_target:
+        if os.path.isabs(target_clean) or target_clean.startswith(("./", "../")):
+            new_repo_path = os.path.abspath(target_clean)
+        else:
+            new_repo_path = os.path.abspath(os.path.join(orch.repo_path, target_clean))
+        os.makedirs(new_repo_path, exist_ok=True)
+        return (
+            Orchestrator(new_repo_path, allowed_directory=orch.allowed_directory),
+            task_description,
+        )
+
+    return orch, f"{task_description} (Target: {target_clean})"
+
+
 def parse_interactive_command(prompt, parser):
     """Parse a full command line if pasted/entered into the interactive prompt.
     Returns (task_description, model_override, is_command_line) or (None, None, False)
@@ -163,12 +195,22 @@ def main():
     parser.add_argument("task", nargs="?", default=None, help="The coding task description")
     parser.add_argument("--repo", default=".", help="Target repository directory path")
     parser.add_argument(
+        "--allowed-dir",
+        default=None,
+        help="Directory within repo allowed for reading context (workspace repo path is what can be modified)",
+    )
+    parser.add_argument(
         "--model",
         default=None,
         choices=["gemma", "gemini", "claude"],
         help="Force a specific model",
     )
     parser.add_argument("--mock", action="store_true", help="Force local Gemma simulated mode")
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Clean up .maca/ staging and task metadata directories",
+    )
     args = parser.parse_args()
 
     # 1. Print CWD
@@ -192,6 +234,7 @@ def main():
 
     # 3. Verify Read/Write Access (Sandbox verification check)
     try:
+        os.makedirs(repo_path, exist_ok=True)
         # Test read
         os.listdir(repo_path)
         # Test write
@@ -216,20 +259,28 @@ def main():
             "[bold yellow]Mock mode forced: Gemma/Gemini will run in simulation mode.[/bold yellow]\n"
         )
 
-    orch = Orchestrator(args.repo)
+    orch = Orchestrator(args.repo, allowed_directory=args.allowed_dir)
+
+    if args.clean:
+        count, removed = orch.workspace.cleanup_tasks()
+        console.print(
+            f"[bold green]✓ Cleaned {count} task artifact directories from .maca/[/bold green]"
+        )
+        if not args.task:
+            return
 
     # Run direct command if provided
     if args.task:
         try:
             task_description = args.task
+            active_orch = orch
             if not contains_filename_or_project(task_description):
                 target = Prompt.ask(
                     "[bold yellow]No file name or project specified. Target file/folder name:[/bold yellow]"
                 )
-                if target.strip():
-                    task_description += f" (Target: {target.strip()})"
+                active_orch, task_description = _apply_target_input(orch, task_description, target)
 
-            orch.run_task(task_description, model_override=args.model)
+            active_orch.run_task(task_description, model_override=args.model)
         except Exception as e:
             console.print(f"[bold red]Error running task: {e}[/bold red]")
         return
@@ -259,6 +310,11 @@ def main():
                     display_welcome(orch)
                 elif cmd == "/status":
                     print_backends_status(orch, run_handshakes=True)
+                elif cmd == "/clean":
+                    count, _ = orch.workspace.cleanup_tasks(staging_only=True)
+                    console.print(
+                        f"[bold green]✓ Cleaned {count} staging directories from .maca/[/bold green]"
+                    )
                 elif cmd == "/model":
                     if len(parts) > 1:
                         val = parts[1].lower()
@@ -300,15 +356,15 @@ def main():
                 current_model_override = model_override
 
             # Check if task description has file name/project folder
+            active_orch = orch
             if not contains_filename_or_project(task_description):
                 target = Prompt.ask(
                     "[bold yellow]No file name or project specified. Target file/folder name:[/bold yellow]"
                 )
-                if target.strip():
-                    task_description += f" (Target: {target.strip()})"
+                active_orch, task_description = _apply_target_input(orch, task_description, target)
 
             # Run the task
-            orch.run_task(task_description, model_override=current_model_override)
+            active_orch.run_task(task_description, model_override=current_model_override)
 
         except (KeyboardInterrupt, EOFError):
             console.print("\n[bold cyan]Goodbye![/bold cyan]")
