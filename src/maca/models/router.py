@@ -30,10 +30,10 @@ class ModelRouter:
                 config.validate_config(complexity, selected_agent="CLAUDE")
                 return model_name, ClaudeClient()
             elif model_name.startswith("GEMMA"):
-                config.validate_config(complexity)
+                config.validate_config(complexity, selected_agent="GEMMA")
                 return model_name, LocalGemmaClient()
             else:
-                config.validate_config(complexity)
+                config.validate_config(complexity, selected_agent="GEMMA")
                 return model_name, LocalGemmaClient()
 
         if complexity == "SIMPLE":
@@ -53,7 +53,7 @@ class ModelRouter:
                 config.validate_config(complexity, selected_agent="CLAUDE")
                 return "CLAUDE (REMOTE)", ClaudeClient()
             else:
-                config.validate_config(complexity)
+                config.validate_config(complexity, selected_agent="GEMMA")
                 return "GEMMA (LOCAL)", LocalGemmaClient()
         else:  # COMPLEX and VERY_COMPLEX
             if claude_online:
@@ -63,5 +63,5 @@ class ModelRouter:
                 config.validate_config(complexity, selected_agent="GEMINI")
                 return "GEMINI (REMOTE)", GeminiClient()
             else:
-                config.validate_config(complexity)
+                config.validate_config(complexity, selected_agent="GEMMA")
                 return "GEMMA (LOCAL)", LocalGemmaClient()
