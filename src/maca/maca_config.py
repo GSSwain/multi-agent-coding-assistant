@@ -58,7 +58,7 @@ def validate_config(complexity, selected_agent=None):
                         (e.g. "GEMINI", "CLAUDE"). If None, falls back to
                         legacy behaviour of requiring Gemini for non-SIMPLE tasks.
     """
-    if complexity == "SIMPLE":
+    if complexity == "SIMPLE" or selected_agent == "GEMMA":
         return  # Local Gemma, no API key needed
 
     if selected_agent == "CLAUDE":

@@ -2,7 +2,7 @@
 
 > [!WARNING]
 > **MACA is currently in active development and is in the ALPHA stage.**
-> You may encounter bugs, breaking changes, or unfinished features.
+You may encounter bugs, breaking changes, or unfinished features.
 
 MACA is a **local-first, hybrid AI coding assistant** that routes work by complexity and coordinates planning, coding, and review agents directly in your workspace.
 
@@ -20,11 +20,16 @@ MACA is a **local-first, hybrid AI coding assistant** that routes work by comple
   - **Simple tasks:** local Gemma (`gemma2:2b`) via Ollama.
   - **Medium complexity tasks:** Google Gemini (`gemini-3.5-flash`) via REST API. If Gemini is offline/unconfigured, falls back to Anthropic Claude, then local Gemma.
   - **Complex / Very Complex tasks:** Anthropic Claude (default `claude-opus-4-8` or custom model) via Messages API. If Claude is offline/unconfigured, falls back to Google Gemini, then local Gemma.
-- **Multi-agent orchestration:** coordinates a planner, coder, and reviewer to work through tasks in sequence.
-  - **Planner Agent:** inspects the codebase and creates an implementation plan.
-  - **Coder Agent:** writes and applies the actual code changes.
-  - **Reviewer Agent:** checks for logic, syntax, and safety issues before final approval.
+- **7-Agent autonomous orchestration:** specialized agents collaborate through a staged pipeline coordinated by the Orchestrator.
+  - **Task Classifier Agent:** evaluates task complexity (`SIMPLE`, `MEDIUM`, `COMPLEX`, `VERY_COMPLEX`).
+  - **Clarifier Agent:** dynamically analyzes greenfield framework requests (Spring Boot, Next.js, React, FastAPI, etc.) and elicits architectural choices (build tool, runtime version, language).
+  - **Planner Agent:** inspects the codebase and creates a structured implementation plan.
+  - **Spec Agent:** drafts formal technical specifications for complex tasks and manages human approval checkpoints.
+  - **Coder Agent:** implements modular, typed code (`SimpleCoder` / `SpecCoder`) strictly adhering to language and framework standards.
+  - **Code Completion Verifier Agent:** checks generated files against specifications in an iterative completion loop.
+  - **Reviewer Agent:** audits code with line-level diff blocks for logic, syntax, and safety, looping with corrections until approved.
 - **Auto-apply workflow:** updates your files directly in the current workspace.
+- **Task isolation & todo tracking:** tracks step-by-step progress and continuation state inside `.maca/<task>/`.
 - **Robust fallbacks:** handles blocked Ollama ports, offline/mock mode, and terminal output fallback paths without breaking the experience.
 
 ---
@@ -32,43 +37,70 @@ MACA is a **local-first, hybrid AI coding assistant** that routes work by comple
 ## 🏗️ Architecture
 
 ```mermaid
-graph TD
-    User([User Prompt]) --> Router[Task Router]
-    Router -.->|1. Classify Task| Gemma[Local Gemma Client]
-    Gemma -.->|2. Complexity Result| Router
+flowchart TD
+    User(["User Prompt"]) --> Orch1["1. Orchestrator: Init TaskContext & Allowed Directory"]
 
-    Router -->|SIMPLE| Gemma
-    Router -->|MEDIUM| Decider1{Backend Availability}
-    Router -->|COMPLEX / VERY_COMPLEX| Decider2{Backend Availability}
-
-    Decider1 -->|Gemini Available| Gemini[Gemini Client]
-    Decider1 -->|Fallback| Claude[Claude Client]
-    Decider1 -->|None Available| Gemma
-
-    Decider2 -->|Claude Available| Claude
-    Decider2 -->|Fallback| Gemini
-    Decider2 -->|None Available| Gemma
-
-    Gemma & Gemini & Claude --> Orchestrator[Multi-Agent Orchestrator]
-
-    subgraph Agents Layer
-        Orchestrator --> Planner[Planner Agent]
-        Planner --> SpecDecider{Is SIMPLE task?}
-        
-        SpecDecider -->|Yes| SimpleCoder[Simple Coder Agent]
-        SpecDecider -->|No| SpecAgent[Spec Agent]
-        
-        SpecAgent --> UserReview[User Review & Approval]
-        UserReview -->|Modify/Approve| SpecCoder[Spec Coder Agent]
-        
-        SimpleCoder & SpecCoder --> Reviewer[Reviewer Agent]
+    %% Step 1: Task Classification
+    subgraph Step1 ["Step 1: Task Classification & Clarification"]
+        Orch1 --> Classifier["TaskClassifierAgent"]
+        Classifier -->|"Complexity: SIMPLE / MEDIUM / COMPLEX / VERY_COMPLEX"| Orch2["Orchestrator: Model Selection"]
+        Orch2 --> ClarifierAgentNode["ClarifierAgent\n(LLM Stack Detection & Clarification)"]
+        ClarifierAgentNode -->|"Bootstrap Config Injected"| Planner["PlannerAgent"]
     end
 
-    Reviewer -->|Approved| Write[File System Writer]
-    Reviewer -->|Rejected| ReCoder[Nudge Coder to fix]
-    ReCoder --> SimpleCoder & SpecCoder
-    Write --> Workspace[(Workspace)]
+    %% Step 2: Implementation Planning
+    subgraph Step2 ["Step 2: Implementation Planning"]
+        Planner -->|"Implementation Plan & .todo"| PlanDoc[".maca/<task>/plan.md"]
+        PlanDoc --> ComplexityCheck{"Task Complexity?"}
+    end
+
+    %% Step 3: Spec & Human Approval
+    subgraph Step3 ["Step 3: Specification & Human Approval"]
+        ComplexityCheck -->|"MEDIUM / COMPLEX / VERY_COMPLEX"| Spec["SpecAgent"]
+        Spec -->|"Technical Specification & .todo"| SpecDoc[".maca/<task>/spec.md"]
+        SpecDoc --> HumanApproval{"Human Spec Review\n(Approve or /cancel)"}
+        HumanApproval -->|"Approved"| Orch3["Orchestrator: Proceed to Implementation"]
+        HumanApproval -->|"'/cancel'"| Abort(["Task Aborted by User"])
+        ComplexityCheck -->|"SIMPLE"| Orch3
+    end
+
+    %% Step 4: In-Memory Code Implementation & Incremental Staging
+    subgraph Step4 ["Step 4: Code Implementation & Incremental Staging"]
+        Orch3 --> Coder["CoderAgent (SimpleCoder / SpecCoder)"]
+        Coder -->|"Generates files & flushes\nincrementally to staging"| StagedFiles["Staged Files Disk Checkpoint\n(.maca/<task>/staging/)"]
+    end
+
+    %% Step 5: Code Completion Loop
+    subgraph Step5 ["Step 5: Code Completion Verification Loop (max 10 iterations)"]
+        StagedFiles --> Verifier["CodeCompletionVerifierAgent"]
+        Verifier --> VerifierDecision{"All Plan Steps\nCompleted?"}
+        VerifierDecision -->|"NO: Missing steps"| NudgeVerifier["Orchestrator Nudge:\nResume from .todo pending items"]
+        NudgeVerifier -->|"Flush incremental updates to staging"| Coder
+    end
+
+    %% Step 6: Pre-Review Staging Persistence
+    subgraph Step6 ["Step 6: Pre-Review Staging Persistence (Workspace Clean)"]
+        VerifierDecision -->|"YES: Complete"| PreReview["WorkspaceManager: flush_to_staging\n& record metadata (.maca/<task>/progress.md)"]
+        PreReview --> DiskStaging[("Staged Files on Disk\n(.maca/<task>/staging/)")]
+    end
+
+    %% Step 7: Review Audit Loop
+    subgraph Step7 ["Step 7: Reviewer Audit & Correction Loop (max 10 iterations)"]
+        DiskStaging --> Reviewer["ReviewerAgent\n(Audits staged files & line diffs)"]
+        Reviewer --> ReviewerDecision{"Review Decision:\nClean Code & Correct?"}
+        ReviewerDecision -->|"REVISIONS REQUESTED"| NudgeReviewer["Orchestrator Nudge:\nPass Reviewer feedback & file blocks"]
+        NudgeReviewer -->|"Flush corrections to staging"| Coder
+    end
+
+    %% Step 8: Post-Review Promotion & Final Completion
+    subgraph Step8 ["Step 8: Post-Review Workspace Promotion & Final Completion"]
+        ReviewerDecision -->|"APPROVED"| Promote["WorkspaceManager: promote_staging_files\n(Applies staged files to workspace repository)"]
+        Promote --> FinalWrite["WorkspaceManager:\nRecord final task completion & updates"]
+        FinalWrite --> Done(["Task Completed Successfully!"])
+    end
 ```
+
+> For an in-depth breakdown of the multi-agent design, JSON-RPC 2.0 communication over persistent stdio, and architectural invariants, see [docs/architecture.md](docs/architecture.md).
 
 ### 1. How Task Routing Works
 
@@ -87,31 +119,38 @@ MACA evaluates task complexity before selecting a model to execute the coding as
 
 Once a model client has been assigned, the **Multi-Agent Orchestrator** manages the coding pipeline using a suite of dedicated, specialized agents:
 
-1. **Planner Agent**:
-   - Analyzes the task description and list of files in the workspace.
-   - Generates a structured Markdown implementation plan specifying the files to create or modify.
-   - Saves the plan to .maca/plan-<task>.md.
+1. **Task Classification & Clarification**:
+   - **Task Classifier Agent**: Analyzes prompt complexity (`SIMPLE`, `MEDIUM`, `COMPLEX`, `VERY_COMPLEX`) to determine model routing and whether a formal specification is required.
+   - **Clarifier Agent**: Analyzes greenfield project requests via LLM (Spring Boot, Spring Framework, Next.js, React, FastAPI, Django, etc.). It extracts parameters already provided in the prompt and interactively elicits critical architectural choices (build tool, runtime/Java version, language variant) with recommended modern LTS choices, falling back to deterministic defaults in non-interactive mode. The resolved configuration is tracked in `.maca/<task>/clarifier.todo` and injected into subsequent planning and coding stages.
 
-2. **Complexity Routing**:
-   - **For SIMPLE Tasks**: Bypasses the specification phase entirely. The orchestrator routes the task directly to the **Simple Coder Agent**, which implements the modifications based solely on the plan.
-   - **For MEDIUM/COMPLEX Tasks**: The orchestrator routes the task to the **Spec Agent** first.
+2. **Planner Agent**:
+   - Analyzes the task description, repository context, and bootstrap configuration.
+   - Generates a structured Markdown implementation plan specifying files to create or modify.
+   - Saves the plan to `.maca/<task>/plan.md` and tracks tasks in `.maca/<task>/planner.todo`.
 
-3. **Spec Agent (Spec Flow)**:
-   - Generates a detailed **Technical Specification** document from the plan.
-   - Saves it to .maca/spec-<task>.md.
-   - **Interactive User Review**: The CLI pauses execution, alerting the user that the specification is ready for review. The user can open .maca/spec-<task>.md, modify it to add constraints or adjust design, and then hit Enter to approve and continue. If the user types /cancel, the task is cleanly aborted.
-   - Once approved, the orchestrator loads the specification and routes it to the **Spec Coder Agent**.
+3. **Complexity Routing & Spec Flow**:
+   - **For SIMPLE Tasks**: Bypasses the specification phase entirely, routing the plan directly to the **Simple Coder Agent**.
+   - **For MEDIUM / COMPLEX / VERY_COMPLEX Tasks**: Routes to the **Spec Agent** to draft a formal **Technical Specification** document at `.maca/<task>/spec.md`.
+   - **Interactive User Review**: The CLI pauses execution, alerting the user that the specification is ready for review. You can open and edit `.maca/<task>/spec.md` to add constraints, then press Enter to approve or type `/cancel` to abort. Once approved, the task proceeds to the **Spec Coder Agent**.
 
-4. **Coder Agents**:
-   - Implements code changes based on either the plan (SimpleCoderAgent) or the technical specification (SpecCoderAgent). Both coder agents strictly enforce **Clean Code Guidelines** (modularity, variable naming, error handling, and type annotations).
-   - Generates file content blocks parsed via [FILE: path].
-   - *Verification Loop*: The orchestrator runs a QA check. If the code is incomplete compared to the specification or plan, it nudges the coder with feedback to continue implementation.
+4. **Coder Agents & Staged Disk Flushing**:
+   - Implements code changes based on either the plan (`SimpleCoderAgent`) or technical specification (`SpecCoderAgent`) with strict language and framework fidelity (e.g. Maven/Gradle and Java 21 for Spring Boot; Vite and TypeScript for React; Python for Python).
+   - Generates code files parsed via `[FILE: path]` blocks and immediately flushes them incrementally to `.maca/<task>/staging/` to avoid OOM memory bloat and checkpoint progress against process interruption.
 
-5. **Reviewer Agent**:
-   - Audits the coder output against **Clean Code Auditing Criteria** (readability, modularity, single responsibility, type safety, and correctness) and the original plan or specification (if available).
-   - **Approval & Verification**:
-     - If the code meets quality standards, it outputs APPROVED, and the orchestrator writes the changes to the disk.
-     - If not, it rejects the code, outputs a detailed feedback report, and nudges the coder to apply corrections. The loop repeats until approved (up to 10 attempts).
+5. **Code Completion Verification Loop**:
+   - **Code Completion Verifier Agent** audits generated code against the specification to ensure all planned steps are complete.
+   - If incomplete, it nudges the coder with feedback and remaining checklist items from `.maca/<task>/coder.todo` (up to 10 iterations). All incremental updates are written to staging disk.
+
+6. **Pre-Review Staging Persistence (Clean Workspace Boundary)**:
+   - Once the Code Completion Verifier confirms all planned steps are present, all generated files are staged in `.maca/<task>/staging/` (`flush_to_staging`).
+   - The user's active workspace repository files remain clean and untouched before review. Stage progress and line-level block metadata are recorded under `.maca/<task>/progress.md` and `.maca/<task>/task.json`.
+
+7. **Reviewer Agent & Correction Loop**:
+   - **Reviewer Agent** audits the staged files using line-level diff blocks against the repository and clean code guidelines (modularity, single responsibility, typing, correctness).
+   - If issues are detected, it outputs a detailed report and nudges the coder to apply corrections to the staged files. The loop repeats until approved (up to 10 attempts).
+
+8. **Post-Review Workspace Promotion**:
+   - Upon Reviewer `APPROVED`, `WorkspaceManager: promote_staging_files` atomically copies/promotes the approved files from `.maca/<task>/staging/` into the workspace repository root (enforcing path safety and dry-run sandbox rules).
 
 
 ## 🛠️ Setup Instructions
@@ -172,13 +211,17 @@ The `./local/scripts/install_mac.sh` launcher script handles setting these up au
 You can also run analysis manually inside your virtual environment:
 ```sh
 # Run linter checks
-ruff check src/
+ruff check .
+ruff format --check .
 
 # Run type checker
-mypy src/
+mypy src
 
 # Run security checks
 bandit -c pyproject.toml -r src/
+
+# Single full validation one-liner:
+PYTHONPATH=src python -m unittest discover -s tests -v && ruff check . && ruff format --check . && mypy src && bandit -c pyproject.toml -r src/
 ```
 
 ---

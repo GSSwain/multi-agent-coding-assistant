@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from unittest import mock
 
@@ -10,6 +11,12 @@ from maca.orchestrator import Orchestrator
 
 
 class BehaviorTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
     def test_heuristic_evaluate_marks_database_task_as_complex(self):
         evaluator = ComplexityEvaluator()
 
@@ -29,6 +36,117 @@ class BehaviorTests(unittest.TestCase):
             result = evaluator.evaluate("Write a hello world script")
 
         self.assertEqual(result, "SIMPLE")
+
+    def test_spring_boot_hello_world_classified_as_complex(self):
+        evaluator = ComplexityEvaluator()
+
+        # Heuristic fallback path
+        with mock.patch.object(
+            evaluator.gemma_client, "generate", side_effect=Exception("offline")
+        ):
+            result = evaluator.evaluate("Creating a hello world spring boot app")
+        self.assertEqual(result, "COMPLEX")
+
+        # Model evaluation with guardrail against naive SIMPLE downgrade
+        with mock.patch.object(evaluator.gemma_client, "generate", return_value="SIMPLE"):
+            guarded_result = evaluator.evaluate("Creating a hello world spring boot app")
+        self.assertEqual(guarded_result, "COMPLEX")
+
+    def test_mock_generators_spring_boot_produce_java_and_pom(self):
+        old_mock = config.MOCK_GEMMA_FALLBACK
+        config.MOCK_GEMMA_FALLBACK = True
+        try:
+            prompt = "Creating a hello world spring boot app"
+
+            # Local Gemma Client mock
+            gemma = LocalGemmaClient()
+            with mock.patch("urllib.request.urlopen", side_effect=RuntimeError("offline")):
+                with mock.patch("subprocess.run", side_effect=FileNotFoundError):
+                    gemma_plan = gemma.generate(prompt, "You are a planner")
+                    gemma_code = gemma.generate(prompt, "You are a coder")
+            self.assertIn("pom.xml", gemma_plan)
+            self.assertIn("DemoApplication.java", gemma_code)
+            self.assertNotIn("output_gemma.py", gemma_code)
+
+            # Gemini Client mock
+            gemini = GeminiClient()
+            with mock.patch.object(gemini, "api_key", ""):
+                gemini_code = gemini.generate(prompt, "You are a coder")
+            self.assertIn("pom.xml", gemini_code)
+            self.assertIn("DemoApplication.java", gemini_code)
+            self.assertNotIn("output_gemini.py", gemini_code)
+
+            # Claude Client mock
+            claude = ClaudeClient()
+            with mock.patch.object(claude, "api_key", ""):
+                claude_code = claude.generate(prompt, "You are a coder")
+            self.assertIn("pom.xml", claude_code)
+            self.assertIn("DemoApplication.java", claude_code)
+            self.assertNotIn("output_claude.py", claude_code)
+        finally:
+            config.MOCK_GEMMA_FALLBACK = old_mock
+
+    def test_mock_generators_spring_boot_with_gradle_produce_gradle_and_java(self):
+        old_mock = config.MOCK_GEMMA_FALLBACK
+        config.MOCK_GEMMA_FALLBACK = True
+        try:
+            prompt = "Creating a hello world spring boot app with Gradle"
+
+            # Local Gemma Client mock
+            gemma = LocalGemmaClient()
+            with mock.patch("urllib.request.urlopen", side_effect=RuntimeError("offline")):
+                with mock.patch("subprocess.run", side_effect=FileNotFoundError):
+                    gemma_plan = gemma.generate(prompt, "You are a planner")
+                    gemma_code = gemma.generate(prompt, "You are a coder")
+            self.assertIn("build.gradle.kts", gemma_plan)
+            self.assertIn("build.gradle.kts", gemma_code)
+            self.assertIn("DemoApplication.java", gemma_code)
+            self.assertNotIn("pom.xml", gemma_code)
+
+            # Gemini Client mock
+            gemini = GeminiClient()
+            with mock.patch.object(gemini, "api_key", ""):
+                gemini_code = gemini.generate(prompt, "You are a coder")
+            self.assertIn("build.gradle.kts", gemini_code)
+            self.assertIn("DemoApplication.java", gemini_code)
+
+            # Claude Client mock
+            claude = ClaudeClient()
+            with mock.patch.object(claude, "api_key", ""):
+                claude_code = claude.generate(prompt, "You are a coder")
+            self.assertIn("build.gradle.kts", claude_code)
+            self.assertIn("DemoApplication.java", claude_code)
+        finally:
+            config.MOCK_GEMMA_FALLBACK = old_mock
+
+    def test_mock_generators_spring_framework_produces_spring_context(self):
+        old_mock = config.MOCK_GEMMA_FALLBACK
+        config.MOCK_GEMMA_FALLBACK = True
+        try:
+            prompt = "Configure a Spring Framework MVC webapp"
+            gemini = GeminiClient()
+            with mock.patch.object(gemini, "api_key", ""):
+                code = gemini.generate(prompt, "You are a coder")
+            self.assertIn("spring-context", code)
+            self.assertIn("AppConfig.java", code)
+            self.assertNotIn("spring-boot", code)
+            self.assertNotIn("SpringBootApplication", code)
+        finally:
+            config.MOCK_GEMMA_FALLBACK = old_mock
+
+    def test_mock_generators_plain_java_produces_main_java(self):
+        old_mock = config.MOCK_GEMMA_FALLBACK
+        config.MOCK_GEMMA_FALLBACK = True
+        try:
+            prompt = "Write a binary search algorithm in Java"
+            gemini = GeminiClient()
+            with mock.patch.object(gemini, "api_key", ""):
+                code = gemini.generate(prompt, "You are a coder")
+            self.assertIn("Main.java", code)
+            self.assertNotIn("pom.xml", code)
+            self.assertNotIn("spring", code.lower())
+        finally:
+            config.MOCK_GEMMA_FALLBACK = old_mock
 
     def test_gemini_client_returns_mock_response_without_api_key(self):
         old_mock = config.MOCK_GEMMA_FALLBACK
@@ -102,7 +220,7 @@ class BehaviorTests(unittest.TestCase):
             config.CLAUDE_TIMEOUT_SECONDS = old_timeout
 
     def test_routing_matrix_medium_both_online(self):
-        orch = Orchestrator(".")
+        orch = Orchestrator(self.temp_dir.name)
         with (
             mock.patch.object(orch, "_is_gemini_online", return_value=True),
             mock.patch.object(orch, "_is_claude_online", return_value=True),
@@ -123,7 +241,7 @@ class BehaviorTests(unittest.TestCase):
             self.assertIsInstance(called_client, GeminiClient)
 
     def test_routing_matrix_medium_only_claude_online(self):
-        orch = Orchestrator(".")
+        orch = Orchestrator(self.temp_dir.name)
         with (
             mock.patch.object(orch, "_is_gemini_online", return_value=False),
             mock.patch.object(orch, "_is_claude_online", return_value=True),
@@ -144,7 +262,7 @@ class BehaviorTests(unittest.TestCase):
             self.assertIsInstance(called_client, ClaudeClient)
 
     def test_routing_matrix_complex_both_online(self):
-        orch = Orchestrator(".")
+        orch = Orchestrator(self.temp_dir.name)
         with (
             mock.patch.object(orch, "_is_gemini_online", return_value=True),
             mock.patch.object(orch, "_is_claude_online", return_value=True),
@@ -165,7 +283,7 @@ class BehaviorTests(unittest.TestCase):
             self.assertIsInstance(called_client, ClaudeClient)
 
     def test_routing_matrix_complex_only_gemini_online(self):
-        orch = Orchestrator(".")
+        orch = Orchestrator(self.temp_dir.name)
         with (
             mock.patch.object(orch, "_is_gemini_online", return_value=True),
             mock.patch.object(orch, "_is_claude_online", return_value=False),
@@ -186,7 +304,7 @@ class BehaviorTests(unittest.TestCase):
             self.assertIsInstance(called_client, GeminiClient)
 
     def test_coder_completion_verification_loop(self):
-        orch = Orchestrator(".")
+        orch = Orchestrator(self.temp_dir.name)
 
         is_done_mock = mock.Mock()
         is_done_mock.side_effect = [
@@ -252,7 +370,7 @@ class BehaviorTests(unittest.TestCase):
             reviewer_run_mock.assert_called_once()
 
     def test_reviewer_rejection_nudge_loop(self):
-        orch = Orchestrator(".")
+        orch = Orchestrator(self.temp_dir.name)
 
         mock_plan = "1. Step one"
 

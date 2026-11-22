@@ -24,5 +24,8 @@ Thanks for your interest in contributing to this project.
 ## Pull request expectations
 - Keep changes small and reviewable.
 - Include tests for behavior changes when possible.
-- Update docs when user-facing behavior changes.
-- Ensure the CI workflow passes.
+- **ALWAYS keep documentation updated**: Any changes affecting architecture, agents, stages, model routing, CLI flags, configuration, or file outputs must be reflected in `README.md` and `docs/architecture.md`.
+- Ensure the full validation suite passes:
+  ```sh
+  PYTHONPATH=src python -m unittest discover -s tests -v && ruff check . && ruff format --check . && mypy src && bandit -c pyproject.toml -r src/
+  ```
