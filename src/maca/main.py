@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from typing import Optional
 
 # Inject package root directory to allow standalone execution
 package_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -8,6 +9,7 @@ if package_root not in sys.path:
     sys.path.append(package_root)
 
 from maca import maca_config as config  # noqa: E402
+from maca.intent import INTENT_CONTINUE, IntentClassifier  # noqa: E402
 from maca.orchestrator import Orchestrator  # noqa: E402
 from maca.rich_compat import Console, Panel, Prompt, Table  # noqa: E402
 
@@ -21,7 +23,7 @@ def display_welcome(orch=None):
         " - [bold green]Simple Complexity[/bold green] -> [bold cyan]Local Gemma[/bold cyan] (via Ollama)\n"
         " - [bold yellow]Medium Complexity[/bold yellow] -> [bold cyan]Google Gemini[/bold cyan] (via API)\n"
         " - [bold red]Complex / Very Complex Complexity[/bold red] -> [bold cyan]Anthropic Claude[/bold cyan] (via API)\n\n"
-        "Type your task prompt directly, or use special slash commands:\n"
+        "Type your task prompt directly, type [bold green]continue[/bold green] to resume a recent task, or use special slash commands:\n"
         " - [bold magenta]/exit[/bold magenta] or [bold magenta]/quit[/bold magenta]: Exit the assistant\n"
         " - [bold magenta]/status[/bold magenta]: Run live connection checks on all models\n"
         " - [bold magenta]/model <name>[/bold magenta]: Override default model (options: gemma, gemini, claude, auto)\n"
@@ -190,6 +192,68 @@ def parse_interactive_command(prompt, parser):
         return None, None, False
 
 
+def handle_continue_intent(orch: Orchestrator, model_override: Optional[str] = None) -> bool:
+    """Identify recent task(s) in the working directory, confirm with the user, and resume."""
+    candidates = orch.task_store.get_recent_candidates()
+    if not candidates:
+        console.print(
+            "[bold yellow]No previous tasks found in this working directory to continue.[/bold yellow]"
+        )
+        return False
+
+    if len(candidates) == 1:
+        selected_task = candidates[0]
+        console.print(
+            Panel(
+                f"[bold white]Task:[/bold white] {selected_task.get('task_description', '')}\n"
+                f"[bold white]Stage:[/bold white] {selected_task.get('stage', 'unknown')} | "
+                f"[bold white]Status:[/bold white] {selected_task.get('status', 'unknown')}\n"
+                f"[bold white]Last Updated:[/bold white] {selected_task.get('updated_at', 'unknown')}",
+                title="[bold cyan]Most Recent Task[/bold cyan]",
+                border_style="cyan",
+            )
+        )
+        confirm = Prompt.ask(
+            "[bold yellow]Continue this task? (y/n)[/bold yellow]",
+            choices=["y", "n"],
+            default="y",
+        )
+        if confirm.strip().lower() != "y":
+            console.print("[bold yellow]Continue cancelled.[/bold yellow]")
+            return False
+    else:
+        table = Table(title="Recent Tasks in This Working Directory")
+        table.add_column("#", style="cyan")
+        table.add_column("Task", style="white")
+        table.add_column("Stage", style="yellow")
+        table.add_column("Status", style="magenta")
+        table.add_column("Last Updated", style="green")
+
+        for idx, task in enumerate(candidates, start=1):
+            table.add_row(
+                str(idx),
+                str(task.get("task_description", "")),
+                str(task.get("stage", "unknown")),
+                str(task.get("status", "unknown")),
+                str(task.get("updated_at", "unknown")),
+            )
+
+        console.print(table)
+        valid_choices = [str(i) for i in range(1, len(candidates) + 1)] + ["cancel"]
+        choice = Prompt.ask(
+            "[bold yellow]Multiple recent tasks found. Which task do you want to continue? (enter number or 'cancel')[/bold yellow]",
+            choices=valid_choices,
+            default="1",
+        )
+        if choice.strip().lower() == "cancel":
+            console.print("[bold yellow]Continue cancelled.[/bold yellow]")
+            return False
+        selected_task = candidates[int(choice) - 1]
+
+    orch.resume_task(selected_task, model_override=model_override)
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description="Multi-Agent Coding Assistant (MACA)")
     parser.add_argument("task", nargs="?", default=None, help="The coding task description")
@@ -260,6 +324,7 @@ def main():
         )
 
     orch = Orchestrator(args.repo, allowed_directory=args.allowed_dir)
+    intent_classifier = IntentClassifier()
 
     if args.clean:
         count, removed = orch.workspace.cleanup_tasks()
@@ -273,6 +338,10 @@ def main():
     if args.task:
         try:
             task_description = args.task
+            if intent_classifier.identify(task_description) == INTENT_CONTINUE:
+                handle_continue_intent(orch, model_override=args.model)
+                return
+
             active_orch = orch
             if not contains_filename_or_project(task_description):
                 target = Prompt.ask(
@@ -354,6 +423,11 @@ def main():
             else:
                 task_description = prompt
                 current_model_override = model_override
+
+            # Identify intent before complexity classification or target prompting
+            if intent_classifier.identify(task_description) == INTENT_CONTINUE:
+                handle_continue_intent(orch, model_override=current_model_override)
+                continue
 
             # Check if task description has file name/project folder
             active_orch = orch

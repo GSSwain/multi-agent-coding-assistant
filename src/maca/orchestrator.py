@@ -14,6 +14,7 @@ from maca.health import BackendHealthService
 from maca.models.router import ModelRouter
 from maca.pipeline import WorkflowPipeline
 from maca.rich_compat import Console, Prompt
+from maca.task_store import TaskStore
 from maca.workspace import WorkspaceManager
 
 __all__ = [
@@ -28,6 +29,7 @@ __all__ = [
     "SpecAgent",
     "SpecCoderAgent",
     "TaskClassifierAgent",
+    "TaskStore",
     "WorkflowPipeline",
     "WorkspaceManager",
 ]
@@ -45,6 +47,7 @@ class Orchestrator:
         self.repo_path = os.path.abspath(repo_path)
         self.allowed_directory = allowed_directory or "."
         self.workspace = WorkspaceManager(self.repo_path, allowed_directory=self.allowed_directory)
+        self.task_store = TaskStore(self.repo_path)
         self.classifier = TaskClassifierAgent()
         self.evaluator = self.classifier  # Backward compatibility alias
         self.conversation_history: List[str] = []
@@ -79,3 +82,9 @@ class Orchestrator:
     def run_task(self, task_description: str, model_override: Optional[str] = None):
         """Coordinates the multi-agent workflow pipeline for the given coding task."""
         return self.pipeline.execute(task_description, model_override=model_override)
+
+    def resume_task(
+        self, task_record: Dict[str, Any], model_override: Optional[str] = None
+    ) -> None:
+        """Resume a previously recorded task without classifying the 'continue' prompt."""
+        return self.pipeline.resume(task_record, model_override=model_override)

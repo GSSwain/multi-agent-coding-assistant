@@ -48,6 +48,12 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
 # If set to True, will mock Gemma/Gemini/Claude calls if unavailable/unconfigured
 MOCK_GEMMA_FALLBACK = os.environ.get("MOCK_GEMMA_FALLBACK", "False").lower() == "true"
 
+# Recency window (in minutes) used to disambiguate multiple recent tasks on 'continue'
+try:
+    CONTINUE_RECENT_WINDOW_MINUTES = float(os.environ.get("MACA_CONTINUE_WINDOW_MINUTES", "5"))
+except ValueError:
+    CONTINUE_RECENT_WINDOW_MINUTES = 5.0
+
 
 def validate_config(complexity, selected_agent=None):
     """Validate that the selected agent has the required configuration.
