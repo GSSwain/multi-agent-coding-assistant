@@ -4,12 +4,22 @@ The **MACA** system is built around a single **Orchestrator** acting as the cent
 
 ```mermaid
 flowchart TD
-    User(["User Prompt"]) --> Orch1["1. Orchestrator: Init TaskContext & Allowed Directory"]
+    User(["User Prompt"]) --> Intent["0. IntentClassifier\n(CONTINUE vs NEW_TASK)"]
+
+    %% Continue Flow (bypasses complexity classification)
+    Intent -->|"CONTINUE"| TaskStore["TaskStore (.maca/tasks.json)\nLookup recent tasks by timestamp"]
+    TaskStore --> ConfirmContinue{"User Confirmation /\nRecent Task Disambiguation"}
+    ConfirmContinue -->|"Confirmed"| ResumeOrch["Orchestrator: resume_task()\n(Reuse saved complexity, plan & spec)"]
+    ConfirmContinue -->|"Cancelled / None"| ContinueAbort(["Continue Aborted"])
+    ResumeOrch --> Orch2
+
+    Intent -->|"NEW_TASK"| Orch1["1. Orchestrator: Init TaskContext & Allowed Directory"]
 
     %% Step 1: Task Classification
     subgraph Step1 ["Step 1: Task Classification & Clarification"]
         Orch1 --> Classifier["TaskClassifierAgent"]
         Classifier -->|"Complexity: SIMPLE / MEDIUM / COMPLEX / VERY_COMPLEX"| Orch2["Orchestrator: Model Selection"]
+        Classifier -.->|"Create & update task record\n(timestamp, stage, status)"| TaskStore
         Orch2 --> ClarifierAgentNode["ClarifierAgent\n(LLM Stack Detection & Clarification)"]
         ClarifierAgentNode -->|"Bootstrap Config Injected"| Planner["PlannerAgent"]
     end
@@ -77,7 +87,9 @@ flowchart TD
 
 | Agent / Service | Module | Responsibility |
 | :--- | :--- | :--- |
-| **Orchestrator** | `maca.orchestrator` | Central agent controlling the workflow, model selection, and nudge loops. |
+| **Orchestrator** | `maca.orchestrator` | Central agent controlling the workflow, model selection, task resumption, and nudge loops. |
+| **IntentClassifier** | `maca.intent` | Identifies `CONTINUE` vs `NEW_TASK` prompt intent prior to complexity classification. |
+| **TaskStore** | `maca.task_store` | Maintains a timestamped list of tasks per working directory in `.maca/tasks.json` and resolves recent continuation candidates. |
 | **TaskClassifierAgent** | `maca.agents.task_classifier` | Classifies task complexity (`SIMPLE`, `MEDIUM`, `COMPLEX`, `VERY_COMPLEX`). |
 | **ClarifierAgent** | `maca.agents.clarifier` | Analyzes tasks via LLM to detect framework bootstrapping, extracts pre-specified parameters, and dynamically formulates architectural clarification questions. |
 | **FrameworkBootstrapClarifier** | `maca.clarifier` | Deterministic rules and fallback heuristics for framework clarification when offline. |
@@ -139,7 +151,8 @@ A dedicated unit test (`tests/test_no_cross_agent_calls.py`) parses the AST of a
 
 ## Task Progress & Todo Checklists (.todo)
 To ensure reliable recovery and avoid re-executing already completed work during multi-round nudge cycles:
-- All task metadata is isolated strictly under `.maca/<task>/` (where `<task>` is generated via `WorkspaceManager.generate_task_slug` with a deterministic 6-character SHA-256 suffix for long descriptions to prevent prefix truncation collisions):
+- All task metadata is isolated strictly under `.maca/` and `.maca/<task>/` (where `<task>` is generated via `WorkspaceManager.generate_task_slug` with a deterministic 6-character SHA-256 suffix for long descriptions to prevent prefix truncation collisions):
+  - `.maca/tasks.json` – Timestamped per-working-directory registry of tasks (`task_id`, `task_name`, `task_description`, `complexity`, `stage`, `status`, `updated_at_ts`) used by `TaskStore` for the `continue` prompt flow.
   - `.maca/<task>/plan.md` – Markdown implementation plan.
   - `.maca/<task>/spec.md` – Technical specification document.
   - `.maca/<task>/<agent>.todo` – Step-by-step checklist tracking completion status per agent.

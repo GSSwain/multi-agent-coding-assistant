@@ -38,12 +38,22 @@ MACA is a **local-first, hybrid AI coding assistant** that routes work by comple
 
 ```mermaid
 flowchart TD
-    User(["User Prompt"]) --> Orch1["1. Orchestrator: Init TaskContext & Allowed Directory"]
+    User(["User Prompt"]) --> Intent["0. IntentClassifier\n(CONTINUE vs NEW_TASK)"]
+
+    %% Continue Flow (bypasses complexity classification)
+    Intent -->|"CONTINUE"| TaskStore["TaskStore (.maca/tasks.json)\nLookup recent tasks by timestamp"]
+    TaskStore --> ConfirmContinue{"User Confirmation /\nRecent Task Disambiguation"}
+    ConfirmContinue -->|"Confirmed"| ResumeOrch["Orchestrator: resume_task()\n(Reuse saved complexity, plan & spec)"]
+    ConfirmContinue -->|"Cancelled / None"| ContinueAbort(["Continue Aborted"])
+    ResumeOrch --> Orch2
+
+    Intent -->|"NEW_TASK"| Orch1["1. Orchestrator: Init TaskContext & Allowed Directory"]
 
     %% Step 1: Task Classification
     subgraph Step1 ["Step 1: Task Classification & Clarification"]
         Orch1 --> Classifier["TaskClassifierAgent"]
         Classifier -->|"Complexity: SIMPLE / MEDIUM / COMPLEX / VERY_COMPLEX"| Orch2["Orchestrator: Model Selection"]
+        Classifier -.->|"Create & update task record\n(timestamp, stage, status)"| TaskStore
         Orch2 --> ClarifierAgentNode["ClarifierAgent\n(LLM Stack Detection & Clarification)"]
         ClarifierAgentNode -->|"Bootstrap Config Injected"| Planner["PlannerAgent"]
     end
@@ -252,3 +262,12 @@ Test the orchestrator workflow without local models or API keys:
 ```sh
 maca --mock "create an event logging class in python"
 ```
+
+### Continue a Previous Task
+MACA maintains a timestamped list of tasks per working directory in `.maca/tasks.json`. To resume a previous task without re-classifying the prompt for complexity, enter `continue` in the interactive REPL or from the CLI:
+```sh
+maca continue
+```
+- MACA identifies the `continue` intent directly via `IntentClassifier` and bypasses `TaskClassifierAgent`.
+- If multiple recent tasks exist within a few minutes of each other (default: 5 minutes, configurable via `MACA_CONTINUE_WINDOW_MINUTES`), MACA displays them and asks you to confirm which task to resume.
+- Once confirmed, `Orchestrator.resume_task()` takes over, reusing the recorded complexity and saved `.maca/<task>/plan.md` and `.maca/<task>/spec.md` artifacts when available.
