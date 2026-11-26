@@ -1,3 +1,7 @@
+import shutil
+import subprocess
+import sys
+import urllib.request
 from typing import Dict
 
 from maca import maca_config as config
@@ -56,9 +60,7 @@ class BackendHealthService:
         gemma_model = config.OLLAMA_MODEL
         gemma_status = "OFFLINE (Mock Mode Fallback)"
 
-        def _detect_ollama():
-            import urllib.request
-
+        def _detect_ollama() -> str:
             try:
                 req = urllib.request.Request(f"{gemma_url}/api/tags", method="GET")
                 with urllib.request.urlopen(req, timeout=2) as res:
@@ -67,21 +69,44 @@ class BackendHealthService:
             except Exception:
                 pass
 
-            import subprocess
-
+            ollama_exe = shutil.which("ollama") or "ollama"
             try:
-                res = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=2)
+                res = subprocess.run(
+                    [ollama_exe, "list"],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=2,
+                )
                 if res.returncode == 0 and res.stdout.strip():
                     return f"ONLINE (Ollama CLI - {gemma_model})"
             except Exception:
                 pass
 
             try:
-                res = subprocess.run(
-                    ["pgrep", "-af", "ollama"], capture_output=True, text=True, timeout=2
-                )
-                if res.returncode == 0 and res.stdout.strip():
-                    return f"ONLINE (Ollama Running - {gemma_model})"
+                if sys.platform == "win32":
+                    res = subprocess.run(
+                        ["tasklist", "/FI", "IMAGENAME eq ollama.exe", "/NH"],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        timeout=2,
+                    )
+                    if res.returncode == 0 and "ollama.exe" in res.stdout.lower():
+                        return f"ONLINE (Ollama Running - {gemma_model})"
+                else:
+                    res = subprocess.run(
+                        ["pgrep", "-af", "ollama"],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        timeout=2,
+                    )
+                    if res.returncode == 0 and res.stdout.strip():
+                        return f"ONLINE (Ollama Running - {gemma_model})"
             except Exception:
                 pass
 

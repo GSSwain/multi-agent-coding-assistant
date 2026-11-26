@@ -18,6 +18,7 @@ Whenever you make changes to this repository:
 ## Validation
 Before submitting changes, run the full validation suite:
 
+### Linux / Unix
 ```sh
 # 1. Run all unit tests
 PYTHONPATH=src python -m unittest discover -s tests -v
@@ -39,4 +40,28 @@ printf "y\n" | PYTHONPATH=src python -m maca.main --repo ./output --mock "Create
 Single one-liner:
 ```sh
 PYTHONPATH=src python -m unittest discover -s tests -v && ruff check . && ruff format --check . && mypy src && bandit -c pyproject.toml -r src/ && (printf "y\n" | PYTHONPATH=src python -m maca.main --repo ./output --mock "Create a simple greeting function in greet.py")
+```
+
+### Windows (PowerShell)
+```powershell
+# 1. Run all unit tests
+$env:PYTHONPATH="src"; python -m unittest discover -s tests -v
+
+# 2. Linting and formatting checks
+ruff check .
+ruff format --check .
+
+# 3. Static type analysis
+mypy src
+
+# 4. Security vulnerability audit
+bandit -c pyproject.toml -r src/
+
+# 5. End-to-end CLI execution verification (targets ./output or outside directory)
+$env:PYTHONPATH="src"; "y" | python -m maca.main --repo ./output --mock "Create a simple greeting function in greet.py"
+```
+
+Single one-liner (PowerShell 7+):
+```powershell
+$env:PYTHONPATH="src"; python -m unittest discover -s tests -v && ruff check . && ruff format --check . && mypy src && bandit -c pyproject.toml -r src/ && ("y" | python -m maca.main --repo ./output --mock "Create a simple greeting function in greet.py")
 ```

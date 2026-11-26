@@ -129,10 +129,11 @@ def _apply_target_input(orch, task_description: str, target_input: str):
         or os.path.isdir(os.path.abspath(os.path.join(orch.repo_path, target_clean)))
     )
     if is_dir_target:
-        if os.path.isabs(target_clean) or target_clean.startswith(("./", "../")):
-            new_repo_path = os.path.abspath(target_clean)
+        target_norm = target_clean.replace("\\", os.sep)
+        if os.path.isabs(target_norm) or target_clean.startswith(("./", "../", ".\\", "..\\")):
+            new_repo_path = os.path.abspath(target_norm)
         else:
-            new_repo_path = os.path.abspath(os.path.join(orch.repo_path, target_clean))
+            new_repo_path = os.path.abspath(os.path.join(orch.repo_path, target_norm))
         os.makedirs(new_repo_path, exist_ok=True)
         return (
             Orchestrator(new_repo_path, allowed_directory=orch.allowed_directory),
@@ -151,14 +152,31 @@ def parse_interactive_command(prompt, parser):
     prompt_stripped = prompt.strip()
 
     # Check if the prompt starts with a command invocation prefix
-    prefixes = ["maca ", "./maca ", "python ", "python3 "]
-    starts_with_prefix = any(prompt_stripped.startswith(p) for p in prefixes)
+    prefixes = (
+        "maca ",
+        "./maca ",
+        ".\\maca ",
+        "maca.exe ",
+        ".\\maca.exe ",
+        "python ",
+        "python3 ",
+        "python.exe ",
+        "py ",
+    )
+    prompt_lower = prompt_stripped.lower()
+    starts_with_prefix = any(prompt_lower.startswith(p) for p in prefixes)
 
     if not starts_with_prefix:
         return None, None, False
 
     try:
-        tokens = shlex.split(prompt_stripped)
+        posix_mode = os.name != "nt"
+        tokens = shlex.split(prompt_stripped, posix=posix_mode)
+        if not posix_mode:
+            tokens = [
+                t[1:-1] if len(t) >= 2 and t[0] == t[-1] and t[0] in ('"', "'") else t
+                for t in tokens
+            ]
     except Exception:
         return None, None, False
 
@@ -167,17 +185,23 @@ def parse_interactive_command(prompt, parser):
 
     # Determine where the arguments start
     start_idx = 0
-    if tokens[0] in ("python", "python3"):
-        if len(tokens) > 1 and (
-            tokens[1].endswith(".py") or "main.py" in tokens[1] or "maca" in tokens[1]
+    cmd_lower = tokens[0].lower()
+    if cmd_lower in ("python", "python3", "python.exe", "python3.exe", "py"):
+        idx = 1
+        if cmd_lower == "py" and len(tokens) > idx and tokens[idx].startswith("-3"):
+            idx += 1
+        if len(tokens) > idx + 1 and tokens[idx] == "-m" and "maca" in tokens[idx + 1]:
+            start_idx = idx + 2
+        elif len(tokens) > idx and (
+            tokens[idx].endswith(".py") or "main.py" in tokens[idx] or "maca" in tokens[idx]
         ):
-            start_idx = 2
+            start_idx = idx + 1
         else:
-            start_idx = 1
-    elif tokens[0] in ("maca", "./maca"):
+            start_idx = idx
+    elif cmd_lower in ("maca", "./maca", ".\\maca", "maca.exe", ".\\maca.exe"):
         start_idx = 1
     else:
-        if "maca" in tokens[0]:
+        if "maca" in cmd_lower:
             start_idx = 1
         else:
             return None, None, False
@@ -254,7 +278,19 @@ def handle_continue_intent(orch: Orchestrator, model_override: Optional[str] = N
     return True
 
 
+def _configure_utf8_console() -> None:
+    """Ensure stdout/stderr use UTF-8 on platforms with legacy default encodings."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
 def main():
+    _configure_utf8_console()
     parser = argparse.ArgumentParser(description="Multi-Agent Coding Assistant (MACA)")
     parser.add_argument("task", nargs="?", default=None, help="The coding task description")
     parser.add_argument("--repo", default=".", help="Target repository directory path")
@@ -303,7 +339,7 @@ def main():
         os.listdir(repo_path)
         # Test write
         test_file = os.path.join(repo_path, ".maca_sandbox_test")
-        with open(test_file, "w") as f:
+        with open(test_file, "w", encoding="utf-8") as f:
             f.write("test")
         os.remove(test_file)
 

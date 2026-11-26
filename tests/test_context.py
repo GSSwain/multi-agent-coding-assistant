@@ -203,7 +203,10 @@ class TestTaskContext(unittest.TestCase):
                 f.write("top secret")
 
             symlink_path = os.path.join(self.test_dir, "src", "ext_link")
-            os.symlink(external_dir, symlink_path)
+            try:
+                os.symlink(external_dir, symlink_path)
+            except (OSError, NotImplementedError) as exc:
+                self.skipTest(f"Symlinks not supported in this environment: {exc}")
 
             self.assertFalse(ws.is_path_safe(os.path.join(symlink_path, "secret.txt")))
             self.assertIn("escapes repository root", ws.read_file("src/ext_link/secret.txt"))

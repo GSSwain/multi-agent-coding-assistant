@@ -1,4 +1,5 @@
 import os
+import posixpath
 import re
 from typing import Any, Dict, List, Optional
 
@@ -123,7 +124,7 @@ def update_todo_progress(
     lines = content.splitlines()
     updated_lines = []
 
-    file_keys = [f.lower().strip() for f in (generated_files or {}).keys()]
+    file_keys = [f.replace("\\", "/").lower().strip() for f in (generated_files or {}).keys()]
 
     for line in lines:
         if line.strip().startswith("- [ ]"):
@@ -134,9 +135,10 @@ def update_todo_progress(
                 should_mark_done = True
             elif file_keys:
                 # If this todo item references any of the generated files
+                item_lower = item_text.lower().replace("\\", "/")
                 for fk in file_keys:
-                    basename = os.path.basename(fk)
-                    if fk in item_text.lower() or basename in item_text.lower():
+                    basename = posixpath.basename(fk)
+                    if fk in item_lower or basename in item_lower:
                         should_mark_done = True
                         break
 

@@ -185,6 +185,7 @@ To provide context engineering and explicit repository boundaries across agent i
 
 Before committing or submitting changes, validate all functionality, style, typing, and security constraints:
 
+### Linux / Unix
 ```sh
 # 1. Run all unit tests
 PYTHONPATH=src python -m unittest discover -s tests -v
@@ -203,5 +204,26 @@ bandit -c pyproject.toml -r src/
 Single one-liner:
 ```sh
 PYTHONPATH=src python -m unittest discover -s tests -v && ruff check . && ruff format --check . && mypy src && bandit -c pyproject.toml -r src/
+```
+
+### Windows (PowerShell)
+```powershell
+# 1. Run all unit tests
+$env:PYTHONPATH="src"; python -m unittest discover -s tests -v
+
+# 2. Linting and formatting checks
+ruff check .
+ruff format --check .
+
+# 3. Static type analysis
+mypy src
+
+# 4. Security vulnerability audit
+bandit -c pyproject.toml -r src/
+```
+
+Single one-liner (PowerShell 7+):
+```powershell
+$env:PYTHONPATH="src"; python -m unittest discover -s tests -v && ruff check . && ruff format --check . && mypy src && bandit -c pyproject.toml -r src/
 ```
 

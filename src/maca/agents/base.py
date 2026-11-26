@@ -24,14 +24,41 @@ class BaseAgent(abc.ABC):
             return os.path.abspath(self.allowed_directory)
         return os.path.abspath(os.path.join(self.repo_path, self.allowed_directory))
 
+    @staticmethod
+    def _is_windows_drive_path(path: str) -> bool:
+        stripped = path.strip()
+        return len(stripped) >= 2 and stripped[0].isalpha() and stripped[1] == ":"
+
+    @staticmethod
+    def _is_unc_path(path: str) -> bool:
+        stripped = path.strip()
+        return stripped.startswith(("\\\\", "//"))
+
+    def _prepare_workspace_path(self, file_path: str) -> Optional[str]:
+        """Prepare a path for joining with repo_path, rejecting cross-OS absolute escapes."""
+        stripped = file_path.strip()
+        if self._is_unc_path(stripped):
+            return None
+        if self._is_windows_drive_path(stripped):
+            if os.name != "nt":
+                return None
+            return stripped
+        return stripped.replace("\\", "/")
+
     def is_path_in_workspace(self, file_path: str) -> bool:
         """Validates that a resolved path resides strictly inside the workspace repository root."""
-        abs_path = os.path.abspath(os.path.join(self.repo_path, file_path))
+        prepared = self._prepare_workspace_path(file_path)
+        if prepared is None:
+            return False
+        abs_path = os.path.abspath(os.path.join(self.repo_path, prepared))
         return self._is_path_safe(abs_path)
 
     def is_path_under_allowed_directory(self, file_path: str) -> bool:
         """Validates that a resolved path resides strictly inside the allowed directory for reading."""
-        abs_path = os.path.abspath(os.path.join(self.repo_path, file_path))
+        prepared = self._prepare_workspace_path(file_path)
+        if prepared is None:
+            return False
+        abs_path = os.path.abspath(os.path.join(self.repo_path, prepared))
         if not self._is_path_safe(abs_path):
             return False
         try:
@@ -85,17 +112,19 @@ class BaseAgent(abc.ABC):
             for file in files:
                 if not file.startswith("."):
                     rel_path = os.path.relpath(os.path.join(root, file), self.repo_path)
-                    files_list.append(rel_path)
+                    files_list.append(rel_path.replace("\\", "/"))
         return files_list
 
     def read_file(self, file_path: str) -> str:
-        abs_path = os.path.abspath(os.path.join(self.repo_path, file_path))
+        prepared = self._prepare_workspace_path(file_path)
+        if prepared is None:
+            return f"Error: Path {file_path} escapes repository root {self.repo_path}"
+        abs_path = os.path.abspath(os.path.join(self.repo_path, prepared))
         if not self._is_path_safe(abs_path):
             return f"Error: Path {file_path} escapes repository root {self.repo_path}"
-        rel_clean = os.path.relpath(abs_path, self.repo_path)
-        if not rel_clean.startswith(".maca") and not self.is_path_under_allowed_directory(
-            file_path
-        ):
+        rel_clean = os.path.relpath(abs_path, self.repo_path).replace("\\", "/")
+        is_maca_internal = rel_clean == ".maca" or rel_clean.startswith(".maca/")
+        if not is_maca_internal and not self.is_path_under_allowed_directory(prepared):
             return f"Error: Path {file_path} is outside allowed directory {self.allowed_directory}"
         try:
             with open(abs_path, "r", encoding="utf-8") as f:
@@ -104,7 +133,10 @@ class BaseAgent(abc.ABC):
             return f"Error reading file {file_path}: {e}"
 
     def write_file(self, file_path: str, content: str) -> str:
-        abs_path = os.path.abspath(os.path.join(self.repo_path, file_path))
+        prepared = self._prepare_workspace_path(file_path)
+        if prepared is None:
+            return f"Error: Path {file_path} escapes repository root {self.repo_path}"
+        abs_path = os.path.abspath(os.path.join(self.repo_path, prepared))
         if not self._is_path_safe(abs_path):
             return f"Error: Path {file_path} escapes repository root {self.repo_path}"
         try:
@@ -134,7 +166,7 @@ class BaseAgent(abc.ABC):
         return content
 
     def parse_files(self, response_text: str) -> Dict[str, str]:
-        pattern = r"\[FILE:\s*([^\s\]]+)\]\s*(?:\r?\n)*```\w*\s*\n(.*?)\n```"
+        pattern = r"\[FILE:\s*([^\s\]]+)\]\s*(?:\r?\n)*```\w*\s*\r?\n(.*?)\r?\n```"
         matches = re.findall(pattern, response_text, re.DOTALL)
 
         files = {}

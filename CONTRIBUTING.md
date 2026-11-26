@@ -17,15 +17,31 @@ Thanks for your interest in contributing to this project.
    python -m pip install -e .
    ```
 4. Run tests:
-   ```sh
-   PYTHONPATH=src python -m unittest discover -s tests -v
-   ```
+   - **Linux / Unix**:
+     ```sh
+     PYTHONPATH=src python -m unittest discover -s tests -v
+     ```
+   - **Windows (PowerShell)**:
+     ```powershell
+     $env:PYTHONPATH="src"; python -m unittest discover -s tests -v
+     ```
 
 ## Pull request expectations
 - Keep changes small and reviewable.
 - Include tests for behavior changes when possible.
 - **ALWAYS keep documentation updated**: Any changes affecting architecture, agents, stages, model routing, CLI flags, configuration, or file outputs must be reflected in `README.md` and `docs/architecture.md`.
 - Ensure the full validation suite passes:
-  ```sh
-  PYTHONPATH=src python -m unittest discover -s tests -v && ruff check . && ruff format --check . && mypy src && bandit -c pyproject.toml -r src/
-  ```
+  - **Linux / Unix**:
+    ```sh
+    PYTHONPATH=src python -m unittest discover -s tests -v && ruff check . && ruff format --check . && mypy src && bandit -c pyproject.toml -r src/
+    ```
+  - **Windows (PowerShell)**:
+    ```powershell
+    $env:PYTHONPATH="src"
+    python -m unittest discover -s tests -v
+    ruff check .
+    ruff format --check .
+    mypy src
+    bandit -c pyproject.toml -r src/
+    ```
+    *(In PowerShell 7+, you can chain these with `&&`: `$env:PYTHONPATH="src"; python -m unittest discover -s tests -v && ruff check . && ruff format --check . && mypy src && bandit -c pyproject.toml -r src/`.)*
