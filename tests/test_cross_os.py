@@ -254,7 +254,7 @@ class TestCrossOsSubprocessAndHealth(unittest.TestCase):
         old_mock = config.MOCK_GEMMA_FALLBACK
         config.MOCK_GEMMA_FALLBACK = False
         cli_ok = subprocess.CompletedProcess(
-            args=["/opt/bin/ollama", "run", "gemma2:2b"],
+            args=["/opt/bin/ollama", "run", "gemma4:e4b"],
             returncode=0,
             stdout="✓ generated response\n",
             stderr="",

@@ -1,4 +1,12 @@
 import os
+from typing import Optional, Tuple
+
+from maca.local_model_selector import (
+    OS_HEADROOM_GB,
+    LocalModelSelection,
+    load_local_model_config,
+    select_gemma_model,
+)
 
 _gemini_key = None
 
@@ -22,8 +30,69 @@ def get_claude_api_key():
     return _claude_key
 
 
+def _resolve_ollama_settings() -> Tuple[str, int, str, bool]:
+    """Resolve local Ollama model and runtime settings.
+
+    Precedence:
+    1. Explicit environment variables (`OLLAMA_MODEL`, `OLLAMA_NUM_CTX`, etc.)
+    2. Persisted local model config (`~/.maca/local_model.env` or `MACA_LOCAL_MODEL_CONFIG`)
+    3. Automatic memory-aware Gemma 4 selection (`select_gemma_model()`)
+    """
+    persisted = load_local_model_config()
+    try:
+        headroom_gb = float(os.environ.get("MACA_OS_HEADROOM_GB", str(OS_HEADROOM_GB)))
+    except ValueError:
+        headroom_gb = OS_HEADROOM_GB
+
+    selection: Optional[LocalModelSelection] = None
+
+    def _get_selection() -> LocalModelSelection:
+        nonlocal selection
+        if selection is None:
+            selection = select_gemma_model(headroom_gb=headroom_gb)
+        return selection
+
+    model = (
+        os.environ.get("OLLAMA_MODEL", "").strip()
+        or persisted.get("OLLAMA_MODEL", "").strip()
+        or _get_selection().model
+    )
+
+    num_ctx: Optional[int] = None
+    for raw_ctx in (
+        os.environ.get("OLLAMA_NUM_CTX", "").strip(),
+        persisted.get("OLLAMA_NUM_CTX", "").strip(),
+    ):
+        if raw_ctx:
+            try:
+                parsed = int(raw_ctx)
+                if parsed > 0:
+                    num_ctx = parsed
+                    break
+            except ValueError:
+                pass
+    if num_ctx is None:
+        num_ctx = _get_selection().num_ctx
+
+    kv_cache_type = (
+        os.environ.get("OLLAMA_KV_CACHE_TYPE", "").strip()
+        or persisted.get("OLLAMA_KV_CACHE_TYPE", "").strip()
+        or "q8_0"
+    )
+    flash_raw = (
+        os.environ.get("OLLAMA_FLASH_ATTENTION", "").strip()
+        or persisted.get("OLLAMA_FLASH_ATTENTION", "").strip()
+        or "1"
+    )
+    flash_attention = flash_raw.lower() in ("1", "true", "yes", "on")
+
+    return model, num_ctx, kv_cache_type, flash_attention
+
+
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma2:2b")
+OLLAMA_MODEL, OLLAMA_NUM_CTX, OLLAMA_KV_CACHE_TYPE, OLLAMA_FLASH_ATTENTION = (
+    _resolve_ollama_settings()
+)
 
 # Configurable timeouts (seconds) for cloud model API calls
 try:

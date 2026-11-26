@@ -19,7 +19,7 @@ class OrchestratorStatusTests(unittest.TestCase):
         ):
             status = orch.check_backends_status(run_handshakes=False)
 
-        self.assertEqual(status["Gemma"], "ONLINE (Ollama HTTP - gemma2:2b)")
+        self.assertEqual(status["Gemma"], f"ONLINE (Ollama HTTP - {config.OLLAMA_MODEL})")
         urlopen_mock.assert_called_once()
 
     def test_status_shows_claude_unconfigured(self):
