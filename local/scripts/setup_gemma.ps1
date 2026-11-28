@@ -172,10 +172,10 @@ if (-not $SelectionUsed) {
             $tierNumCtx = 16384
         } elseif ($effectiveTotal -ge 16.0) {
             $tierModel = "hf.co/crucible-labs/Gemma4-26B-A4B-REAP-25-GGUF:Q3_K-mixed"
-            $tierNumCtx = if ($effectiveTotal -ge 18.0) { 16384 } else { 8192 }
+            $tierNumCtx = 16384
         } elseif ($effectiveTotal -ge 12.0) {
             $tierModel = "gemma4:e4b"
-            $tierNumCtx = 8192
+            $tierNumCtx = 16384
         } else {
             $tierModel = "gemma4:e2b"
             $tierNumCtx = 8192

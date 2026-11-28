@@ -52,10 +52,7 @@ class SpecAgent(BaseAgent):
     ) -> str:
         system_instruction = self._build_system_instruction()
         prompt = self._build_prompt(task_description, plan, history=history)
-        try:
-            spec = str(self.model_client.generate(prompt, system_instruction))
-        except Exception as e:
-            raise RuntimeError(f"Agent {self.name} failed during generation: {e}") from e
+        spec = self._generate(prompt, system_instruction)
 
         if task_name:
             todo_text = (

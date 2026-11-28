@@ -207,19 +207,18 @@ def _select_tier(total_memory_gb: Optional[float], headroom_gb: float) -> LocalM
             overridden=False,
         )
     if effective_total >= 16.0:
-        ctx_len = 16384 if effective_total >= 18.0 else 8192
         return LocalModelSelection(
             total_memory_gb=total_rounded,
             os_headroom_gb=headroom_gb,
             model_budget_gb=budget_gb,
             model=MODEL_REAP_Q3_26B,
-            num_ctx=ctx_len,
+            num_ctx=16384,
             kv_cache_type=DEFAULT_KV_CACHE_TYPE,
             flash_attention=DEFAULT_FLASH_ATTENTION,
             tier="16-27GB",
             reason=(
-                f"16-27 GB tier: selects Gemma4-26B-A4B-REAP-25 Q3_K-mixed (~10.3 GB) "
-                f"with {ctx_len} context."
+                "16-27 GB tier: selects Gemma4-26B-A4B-REAP-25 Q3_K-mixed (~10.3 GB) "
+                "with 16K context."
             ),
             overridden=False,
         )
@@ -229,11 +228,11 @@ def _select_tier(total_memory_gb: Optional[float], headroom_gb: float) -> LocalM
             os_headroom_gb=headroom_gb,
             model_budget_gb=budget_gb,
             model=MODEL_E4B,
-            num_ctx=8192,
+            num_ctx=16384,
             kv_cache_type=DEFAULT_KV_CACHE_TYPE,
             flash_attention=DEFAULT_FLASH_ATTENTION,
             tier="12-15GB",
-            reason="12-15 GB tier: selects gemma4:e4b (~5 GB) with 8K context.",
+            reason="12-15 GB tier: selects gemma4:e4b (~5 GB) with 16K context.",
             overridden=False,
         )
 

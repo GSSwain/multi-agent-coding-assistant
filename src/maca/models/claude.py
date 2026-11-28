@@ -11,6 +11,10 @@ class ClaudeClient:
         self.model = config.CLAUDE_MODEL
         self.timeout = config.CLAUDE_TIMEOUT_SECONDS
 
+    def get_context_window(self) -> int:
+        """Return the configured context window for Claude models."""
+        return int(config.CLAUDE_CONTEXT_WINDOW)
+
     def generate(self, prompt, system_instruction=""):
         if not self.api_key:
             if config.MOCK_GEMMA_FALLBACK:

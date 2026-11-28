@@ -12,6 +12,10 @@ class GeminiClient:
         self.model = config.GEMINI_MODEL
         self.timeout = config.GEMINI_TIMEOUT_SECONDS
 
+    def get_context_window(self) -> int:
+        """Return the configured context window for Gemini models."""
+        return int(config.GEMINI_CONTEXT_WINDOW)
+
     def generate(self, prompt, system_instruction=""):
         if not self.api_key:
             if config.MOCK_GEMMA_FALLBACK:

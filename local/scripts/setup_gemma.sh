@@ -165,12 +165,10 @@ if [ "$SELECTOR_USED" -ne 1 ]; then
         print "gemma4:26b-a4b-it-q8_0 32768"
       } else if (eff >= 28.0) {
         print "gemma4:26b 16384"
-      } else if (eff >= 18.0) {
-        print "hf.co/crucible-labs/Gemma4-26B-A4B-REAP-25-GGUF:Q3_K-mixed 16384"
       } else if (eff >= 16.0) {
-        print "hf.co/crucible-labs/Gemma4-26B-A4B-REAP-25-GGUF:Q3_K-mixed 8192"
+        print "hf.co/crucible-labs/Gemma4-26B-A4B-REAP-25-GGUF:Q3_K-mixed 16384"
       } else if (eff >= 12.0) {
-        print "gemma4:e4b 8192"
+        print "gemma4:e4b 16384"
       } else {
         print "gemma4:e2b 8192"
       }

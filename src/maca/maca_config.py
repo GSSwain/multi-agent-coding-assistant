@@ -1,3 +1,4 @@
+import math
 import os
 from typing import Optional, Tuple
 
@@ -122,6 +123,67 @@ try:
     CONTINUE_RECENT_WINDOW_MINUTES = float(os.environ.get("MACA_CONTINUE_WINDOW_MINUTES", "5"))
 except ValueError:
     CONTINUE_RECENT_WINDOW_MINUTES = 5.0
+
+
+def _parse_int_env(value: Optional[str], default: int) -> int:
+    if value is None or not value.strip():
+        return default
+    try:
+        return int(value.strip())
+    except ValueError:
+        return default
+
+
+def _parse_float_env(value: Optional[str], default: float) -> float:
+    if value is None or not value.strip():
+        return default
+    try:
+        parsed = float(value.strip())
+    except ValueError:
+        return default
+    if math.isnan(parsed) or math.isinf(parsed):
+        return default
+    return parsed
+
+
+def _parse_optional_nonneg_int_env(value: Optional[str]) -> Optional[int]:
+    if value is None or not value.strip():
+        return None
+    try:
+        parsed = int(value.strip())
+    except ValueError:
+        return None
+    return parsed if parsed >= 0 else None
+
+
+# Pre-flight context token budget settings to prevent silent local truncation
+_raw_explicit_budget = os.environ.get("MACA_CONTEXT_TOKEN_BUDGET")
+CONTEXT_TOKEN_BUDGET_OVERRIDE: Optional[int] = _parse_optional_nonneg_int_env(_raw_explicit_budget)
+
+_raw_context_budget = _raw_explicit_budget
+if _raw_context_budget is None or not _raw_context_budget.strip():
+    _raw_context_budget = os.environ.get("OLLAMA_NUM_CTX")
+
+_default_local_budget = OLLAMA_NUM_CTX if OLLAMA_NUM_CTX > 0 else 16384
+CONTEXT_TOKEN_BUDGET: int = _parse_int_env(_raw_context_budget, _default_local_budget)
+if CONTEXT_TOKEN_BUDGET < 0:
+    CONTEXT_TOKEN_BUDGET = _default_local_budget
+
+_raw_gemini_ctx = os.environ.get("MACA_GEMINI_CONTEXT_WINDOW")
+GEMINI_CONTEXT_WINDOW: int = _parse_int_env(_raw_gemini_ctx, 50000)
+if GEMINI_CONTEXT_WINDOW <= 0:
+    GEMINI_CONTEXT_WINDOW = 50000
+
+_raw_claude_ctx = os.environ.get("MACA_CLAUDE_CONTEXT_WINDOW")
+CLAUDE_CONTEXT_WINDOW: int = _parse_int_env(_raw_claude_ctx, 50000)
+if CLAUDE_CONTEXT_WINDOW <= 0:
+    CLAUDE_CONTEXT_WINDOW = 50000
+
+_raw_reserve_ratio = os.environ.get("MACA_CONTEXT_OUTPUT_RESERVE_RATIO")
+CONTEXT_OUTPUT_RESERVE_RATIO: float = _parse_float_env(_raw_reserve_ratio, 0.30)
+
+_raw_budget_enabled = os.environ.get("MACA_CONTEXT_BUDGET_ENABLED", "true").strip().lower()
+CONTEXT_BUDGET_ENABLED: bool = _raw_budget_enabled not in {"false", "0", "no", "off"}
 
 
 def validate_config(complexity, selected_agent=None):

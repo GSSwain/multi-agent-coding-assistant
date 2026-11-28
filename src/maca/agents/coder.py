@@ -206,10 +206,7 @@ class SimpleCoderAgent(BaseCoderAgent):
         )
         system_instruction = self._build_system_instruction()
 
-        try:
-            response = str(self.model_client.generate(prompt, system_instruction))
-        except Exception as e:
-            raise RuntimeError(f"Agent {self.name} failed during generation: {e}") from e
+        response = self._generate(prompt, system_instruction)
 
         if task_name:
             parsed = self.parse_files(response)
@@ -318,10 +315,7 @@ class SpecCoderAgent(BaseCoderAgent):
         )
         system_instruction = self._build_system_instruction()
 
-        try:
-            response = str(self.model_client.generate(prompt, system_instruction))
-        except Exception as e:
-            raise RuntimeError(f"Agent {self.name} failed during generation: {e}") from e
+        response = self._generate(prompt, system_instruction)
 
         if task_name:
             parsed = self.parse_files(response)
