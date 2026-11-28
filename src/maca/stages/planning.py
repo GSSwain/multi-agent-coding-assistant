@@ -5,6 +5,7 @@ from maca.agents.clarifier import ClarifierAgent
 from maca.agents.planner import PlannerAgent
 from maca.agents.spec import SpecAgent
 from maca.context import TaskContext
+from maca.repo_summarizer import build_repo_map
 from maca.rich_compat import Console, Prompt
 from maca.stages.common import (
     _get_orch_attr,
@@ -137,6 +138,16 @@ class PlanningStage:
         else:
             repo_files = self.orch.workspace.list_files()
 
+        repo_map = ""
+        if (
+            repo_files
+            and not _is_mock(planner_cls)
+            and not _is_mock(planner.run)
+            and not _is_mock(self.orch.workspace)
+            and not _is_mock(self.orch.workspace.read_file)
+        ):
+            repo_map = build_repo_map(repo_files, self.orch.workspace.read_file)
+
         self.orch.display.show_step_header("Step 1: Planner Agent starting...")
         with console.status(
             "[bold yellow]Planner Agent is generating the implementation plan...[/bold yellow]",
@@ -156,6 +167,7 @@ class PlanningStage:
                     model_name,
                     task_description=effective_task,
                     repo_files=repo_files,
+                    repo_map=repo_map,
                 )
                 plan = self.orch.call_agent("maca.agents.planner", payload).get("result", "")
 

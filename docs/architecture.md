@@ -93,7 +93,8 @@ flowchart TD
 | **TaskClassifierAgent** | `maca.agents.task_classifier` | Classifies task complexity (`SIMPLE`, `MEDIUM`, `COMPLEX`, `VERY_COMPLEX`). |
 | **ClarifierAgent** | `maca.agents.clarifier` | Analyzes tasks via LLM to detect framework bootstrapping, extracts pre-specified parameters, and dynamically formulates architectural clarification questions. |
 | **FrameworkBootstrapClarifier** | `maca.clarifier` | Deterministic rules and fallback heuristics for framework clarification when offline. |
-| **PlannerAgent** | `maca.agents.planner` | Analyzes user request and repo files to generate an implementation plan. |
+| **PlannerAgent** | `maca.agents.planner` | Analyzes user request, repo file list, and compact AST/symbol repository map to generate an implementation plan. |
+| **RepoSummarizer** | `maca.repo_summarizer` | Builds compact AST/regex structural repository maps for planning and classifies/summarizes read-only reference files. |
 | **SpecAgent** | `maca.agents.spec` | Converts implementation plan into a formal technical specification for complex tasks. |
 | **CoderAgent** | `maca.agents.coder` | Implements requested code changes based on plan or specification (`SimpleCoder` / `SpecCoder`). |
 | **CodeCompletionVerifierAgent** | `maca.agents.code_completion_verifier` | Verifies whether all planned steps in the specification are fully implemented. |
@@ -110,9 +111,10 @@ The multi-agent workflow is structured into cohesive stages coordinated by `Work
 1. **PlanningStage** (`src/maca/stages/planning.py`):
    - Evaluates complexity (`TaskClassifierAgent`).
    - Elicits framework bootstrap configuration (`ClarifierAgent`).
-   - Generates implementation plan (`PlannerAgent`).
+   - Builds a compact structural repository map (`RepoSummarizer`) and generates an implementation plan (`PlannerAgent`).
    - For medium, complex, and very complex tasks, drafts formal specification (`SpecAgent`) and pauses for user interactive review or `/cancel`.
 2. **CodingStage** (`src/maca/stages/coding.py`):
+   - Collects target file contents (with optional read-only reference skeleton summarization via `RepoSummarizer`).
    - Executes code generation (`SimpleCoderAgent` for simple tasks, `SpecCoderAgent` for complex tasks).
    - Runs iterative verification loop with `CodeCompletionVerifierAgent` (up to 10 iterations) to guarantee completeness.
    - Nudges coder with remaining items from `.maca/<task>/coder.todo` and delta-only file context (`maca.delta_context.build_delta_file_context`) so unmentioned unchanged files are compacted into 1-line summaries.

@@ -23,7 +23,7 @@ MACA is a **local-first, hybrid AI coding assistant** that routes work by comple
 - **7-Agent autonomous orchestration:** specialized agents collaborate through a staged pipeline coordinated by the Orchestrator.
   - **Task Classifier Agent:** evaluates task complexity (`SIMPLE`, `MEDIUM`, `COMPLEX`, `VERY_COMPLEX`).
   - **Clarifier Agent:** dynamically analyzes greenfield framework requests (Spring Boot, Next.js, React, FastAPI, etc.) and elicits architectural choices (build tool, runtime version, language).
-  - **Planner Agent:** inspects the codebase and creates a structured implementation plan.
+  - **Planner Agent:** inspects the codebase using a compact AST/symbol structural repository map and creates a structured implementation plan.
   - **Spec Agent:** drafts formal technical specifications for complex tasks and manages human approval checkpoints.
   - **Coder Agent:** implements modular, typed code (`SimpleCoder` / `SpecCoder`) strictly adhering to language and framework standards.
   - **Code Completion Verifier Agent:** checks generated files against specifications in an iterative completion loop.
@@ -134,7 +134,7 @@ Once a model client has been assigned, the **Multi-Agent Orchestrator** manages 
    - **Clarifier Agent**: Analyzes greenfield project requests via LLM (Spring Boot, Spring Framework, Next.js, React, FastAPI, Django, etc.). It extracts parameters already provided in the prompt and interactively elicits critical architectural choices (build tool, runtime/Java version, language variant) with recommended modern LTS choices, falling back to deterministic defaults in non-interactive mode. The resolved configuration is tracked in `.maca/<task>/clarifier.todo` and injected into subsequent planning and coding stages.
 
 2. **Planner Agent**:
-   - Analyzes the task description, repository context, and bootstrap configuration.
+   - Analyzes the task description, repository file list, compact AST/symbol repository structure map (`RepoSummarizer`), and bootstrap configuration.
    - Generates a structured Markdown implementation plan specifying files to create or modify.
    - Saves the plan to `.maca/<task>/plan.md` and tracks tasks in `.maca/<task>/planner.todo`.
 
