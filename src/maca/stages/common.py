@@ -29,7 +29,12 @@ def _get_orch_attr(attr_name: str, fallback: Any) -> Any:
 def build_agent_payload(
     orch: Any, task_context: TaskContext, model_name: str, **kwargs: Any
 ) -> Dict[str, Any]:
-    """Constructs canonical payload for A2A IPC calls via orchestrator."""
+    """Constructs canonical payload for A2A IPC calls via orchestrator.
+
+    When ``plan``, ``spec``, or ``plan_or_spec`` are explicitly provided in
+    ``kwargs``, ``task_context.to_compact_dict(...)`` is used so large plan or
+    spec bodies are not duplicated inside ``payload["context"]``.
+    """
     raw_history = getattr(orch, "conversation_history", [])
     history_payload: Any
     if isinstance(raw_history, (list, tuple)):
@@ -39,14 +44,19 @@ def build_agent_payload(
         history_payload = compacted_history
     else:
         history_payload = raw_history
-    payload = {
+
+    has_plan_or_spec = bool(kwargs.get("plan_or_spec"))
+    omit_plan = bool(kwargs.get("plan")) or has_plan_or_spec
+    omit_spec = bool(kwargs.get("spec")) or has_plan_or_spec
+    context_dict = task_context.to_compact_dict(omit_plan=omit_plan, omit_spec=omit_spec)
+    payload: Dict[str, Any] = {
         "task_name": task_context.task_name,
         "task_description": task_context.task,
         "history": history_payload,
         "model_name": model_name,
         "repo_path": orch.repo_path,
         "allowed_directory": orch.allowed_directory,
-        "context": task_context.to_dict(),
+        "context": context_dict,
     }
     payload.update(kwargs)
     return payload

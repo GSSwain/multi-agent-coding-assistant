@@ -113,6 +113,27 @@ class TaskContext:
             "updated_at": self.updated_at,
         }
 
+    def to_compact_dict(self, omit_plan: bool = False, omit_spec: bool = False) -> Dict[str, Any]:
+        """Serialize context to a compact dictionary for IPC payloads.
+
+        When ``omit_plan`` or ``omit_spec`` is True (for example, when the full
+        plan or spec is already passed as a top-level payload key), the
+        corresponding body is omitted and replaced with lightweight metadata
+        (``plan_omitted``/``plan_chars`` and ``spec_omitted``/``spec_chars``).
+        """
+        data = self.to_dict()
+        if omit_plan:
+            plan_text = data.pop("plan", None)
+            if isinstance(plan_text, str) and plan_text:
+                data["plan_omitted"] = True
+                data["plan_chars"] = len(plan_text)
+        if omit_spec:
+            spec_text = data.pop("spec", None)
+            if isinstance(spec_text, str) and spec_text:
+                data["spec_omitted"] = True
+                data["spec_chars"] = len(spec_text)
+        return data
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TaskContext":
         """Deserialize context from a dictionary."""
