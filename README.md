@@ -199,8 +199,8 @@ During setup, `./local/scripts/setup_gemma.sh` (Linux / Unix) and `.\local\scrip
 | :--- | :--- | :--- | :--- | :--- |
 | `>= 40 GB` | `>= 30 GB` | `gemma4:26b-a4b-it-q8_0` | ~28 GB | 32K (`32768`) |
 | `28–39 GB` | `18–29 GB` | `gemma4:26b` (`Q4_K_M`) | ~16 GB | 16K (`16384`) |
-| `16–27 GB` | `6–17 GB` | `hf.co/crucible-labs/Gemma4-26B-A4B-REAP-25-GGUF:Q3_K-mixed` | ~10.3 GB | 8K–16K (`16384` at `>= 18 GB`, `8192` below `18 GB`) |
-| `12–15 GB` | `2–5 GB` | `gemma4:e4b` | ~5 GB | 8K (`8192`) |
+| `16–27 GB` | `6–17 GB` | `hf.co/crucible-labs/Gemma4-26B-A4B-REAP-25-GGUF:Q3_K-mixed` | ~10.3 GB | 16K (`16384`) |
+| `12–15 GB` | `2–5 GB` | `gemma4:e4b` | ~5 GB | 16K (`16384`) |
 | `< 12 GB` | `< 2 GB` | `gemma4:e2b` | ~4 GB | 8K (`8192`) |
 
 * **Automatic Persistence**: Both `setup_gemma.sh` and `setup_gemma.ps1` save the chosen `OLLAMA_MODEL`, `OLLAMA_NUM_CTX`, `OLLAMA_KV_CACHE_TYPE`, and `OLLAMA_FLASH_ATTENTION` settings to `~/.maca/local_model.env` (override path with `MACA_LOCAL_MODEL_CONFIG`), so `maca` automatically uses the installed model and context length at runtime.

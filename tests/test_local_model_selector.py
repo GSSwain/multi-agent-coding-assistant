@@ -35,8 +35,8 @@ class TestLocalModelSelectionTiers(unittest.TestCase):
             (32.0, MODEL_Q4_26B, 16384, 22.0, "28-39GB"),
             (28.0, MODEL_Q4_26B, 16384, 18.0, "28-39GB"),
             (18.0, MODEL_REAP_Q3_26B, 16384, 8.0, "16-27GB"),
-            (16.0, MODEL_REAP_Q3_26B, 8192, 6.0, "16-27GB"),
-            (12.0, MODEL_E4B, 8192, 2.0, "12-15GB"),
+            (16.0, MODEL_REAP_Q3_26B, 16384, 6.0, "16-27GB"),
+            (12.0, MODEL_E4B, 16384, 2.0, "12-15GB"),
             (8.0, MODEL_E2B, 8192, 0.0, "<12GB"),
         ]
         for total_gb, expected_model, expected_ctx, expected_budget, expected_tier in cases:
@@ -273,7 +273,7 @@ class TestConfigPersistenceAndCli(unittest.TestCase):
                 )
                 model, num_ctx, _, _ = config._resolve_ollama_settings()
                 self.assertEqual(model, MODEL_E4B)
-                self.assertEqual(num_ctx, 8192)
+                self.assertEqual(num_ctx, 16384)
 
     def test_local_gemma_client_forwards_num_ctx_option(self):
         captured_payloads = []
