@@ -27,8 +27,11 @@ class CodingStage:
         self, repo_files: List[str], plan: str, spec: str
     ) -> Dict[str, str]:
         repo_files_content = {}
+        plan_lower = plan.lower().replace("\\", "/")
+        spec_lower = spec.lower().replace("\\", "/")
         for filepath in repo_files:
-            if filepath.lower() in spec.lower() or filepath.lower() in plan.lower():
+            norm_path = filepath.replace("\\", "/").lower()
+            if norm_path in spec_lower or norm_path in plan_lower:
                 content = self.orch.workspace.read_file(filepath)
                 if not content.startswith("Error"):
                     repo_files_content[filepath] = content

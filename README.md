@@ -166,21 +166,35 @@ Once a model client has been assigned, the **Multi-Agent Orchestrator** manages 
 ## 🛠️ Setup Instructions
 
 ### 1. Install and run the CLI
-Use the local launcher scripts under [local/scripts](local/scripts):
-```sh
-./local/scripts/install_mac.sh
-./local/scripts/run_mac.sh
-```
+Use the cross-platform launcher scripts under [local/scripts](local/scripts):
 
-If you only need the Gemma/Ollama setup, use:
-```sh
-./local/scripts/setup_gemma.sh
-```
+* **Linux / Unix (and macOS)**:
+  ```sh
+  ./local/scripts/install.sh
+  ./local/scripts/run.sh
+  ```
+  > **Note:** `./local/scripts/install_mac.sh` and `./local/scripts/run_mac.sh` remain available as backwards-compatible wrappers that delegate to `install.sh` and `run.sh`.
 
-### 2. Configure API Keys (Environment or macOS Keychain)
-MACA uses Google Gemini and Anthropic Claude for medium and above tasks. For secure setup details, see [docs/keys_setup.md](docs/keys_setup.md).
+  If you only need the Gemma/Ollama setup, use:
+  ```sh
+  ./local/scripts/setup_gemma.sh
+  ```
 
-* **Quick Env Setup**:
+* **Windows (PowerShell)**:
+  ```powershell
+  .\local\scripts\install.ps1
+  .\local\scripts\run.ps1
+  ```
+
+  If you only need the Gemma/Ollama setup, use:
+  ```powershell
+  .\local\scripts\setup_gemma.ps1
+  ```
+
+### 2. Configure API Keys (Environment or OS Secret Storage)
+MACA uses Google Gemini and Anthropic Claude for medium and above tasks. For secure OS-specific credential storage instructions (Linux `secret-tool`, Windows Credential Manager, and macOS Keychain), see [docs/keys_setup.md](docs/keys_setup.md).
+
+* **Quick Env Setup (Linux / Unix)**:
   ```bash
   export GEMINI_API_KEY="your-gemini-api-key"
   export CLAUDE_API_KEY="your-claude-api-key"
@@ -194,17 +208,45 @@ MACA uses Google Gemini and Anthropic Claude for medium and above tasks. For sec
   export CLAUDE_MODEL="claude-opus-4-8"
   export CLAUDE_TIMEOUT_SECONDS="120"
   ```
-* **Recommended macOS Keychain + .zshenv Setup**:
+
+* **Quick Env Setup (Windows PowerShell)**:
+  ```powershell
+  # Current session only
+  $env:GEMINI_API_KEY="your-gemini-api-key"
+  $env:CLAUDE_API_KEY="your-claude-api-key"
+
+  # Or persist across future sessions (restart terminal afterwards)
+  setx GEMINI_API_KEY "your-gemini-api-key"
+  setx CLAUDE_API_KEY "your-claude-api-key"
+  ```
+
+  Optional model and timeout overrides in PowerShell:
+  ```powershell
+  $env:GEMINI_MODEL="gemini-3.5-flash"
+  $env:GEMINI_TIMEOUT_SECONDS="120"
+
+  $env:CLAUDE_MODEL="claude-opus-4-8"
+  $env:CLAUDE_TIMEOUT_SECONDS="120"
+  ```
+
+* **Recommended Secure Storage Examples** (see [docs/keys_setup.md](docs/keys_setup.md) for full Linux, Windows, and macOS steps):
   ```bash
-  security add-generic-password -a "$USER" -s "MACA_GEMINI_API_KEY" -w "your-gemini-key"
-  echo 'export GEMINI_API_KEY="$(security find-generic-password -a "$USER" -s "MACA_GEMINI_API_KEY" -w 2>/dev/null)"' >> ~/.zshenv
+  # macOS Keychain + ~/.zshenv
+  security add-generic-password -a "$USER" -s "GEMINI_API_KEY" -w "your-gemini-key"
+  echo 'export GEMINI_API_KEY="$(security find-generic-password -a "$USER" -s "GEMINI_API_KEY" -w 2>/dev/null)"' >> ~/.zshenv
   source ~/.zshenv
   ```
-  This keeps the secret in your Keychain and makes it available to MACA every time a new zsh session starts.
+  This keeps secrets out of plain-text shell config files while making `GEMINI_API_KEY` and `CLAUDE_API_KEY` available to MACA in new sessions.
 
 ### 3. Run tests
+**Linux / Unix:**
 ```sh
 PYTHONPATH=src python -m unittest discover -s tests -v
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:PYTHONPATH="src"; python -m unittest discover -s tests -v
 ```
 
 ### 4. Development & Static Analysis
@@ -213,12 +255,14 @@ We enforce code quality and security checks on both local builds and CI pipeline
 - **Mypy**: Strict type-checking.
 - **Bandit**: Security scanning for potential vulnerabilities.
 
-The `./local/scripts/install_mac.sh` launcher script handles setting these up automatically. It will:
+The launcher install scripts (`./local/scripts/install.sh` on Linux/Unix or `.\local\scripts\install.ps1` on Windows PowerShell) handle setting these up automatically. They will:
 1. Install all dependencies from `requirements-dev.txt`.
 2. Install **pre-commit** hooks (`pre-commit install`) that auto-fix code style issues on commit.
 3. Run Ruff, Mypy, and Bandit audits locally. If any check fails, the build script exits with a non-zero exit code.
 
 You can also run analysis manually inside your virtual environment:
+
+**Linux / Unix:**
 ```sh
 # Run linter checks
 ruff check .
@@ -234,14 +278,35 @@ bandit -c pyproject.toml -r src/
 PYTHONPATH=src python -m unittest discover -s tests -v && ruff check . && ruff format --check . && mypy src && bandit -c pyproject.toml -r src/
 ```
 
+**Windows (PowerShell):**
+```powershell
+# Run tests and static analysis
+$env:PYTHONPATH="src"
+python -m unittest discover -s tests -v
+ruff check .
+ruff format --check .
+mypy src
+bandit -c pyproject.toml -r src/
+
+# Single full validation one-liner (PowerShell 7+):
+$env:PYTHONPATH="src"; python -m unittest discover -s tests -v && ruff check . && ruff format --check . && mypy src && bandit -c pyproject.toml -r src/
+```
+
 ---
 
 ## 💻 How to Use
 
 ### Run in Interactive REPL Mode
 Launch the interactive console:
+
+**Linux / Unix:**
 ```sh
 python3 -B src/maca/main.py
+```
+
+**Windows (PowerShell):**
+```powershell
+python -B src/maca/main.py
 ```
 
 ### Run a Single Command Task

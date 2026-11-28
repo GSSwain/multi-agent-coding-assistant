@@ -44,6 +44,32 @@ class WorkspaceManager:
             return os.path.abspath(self.allowed_directory)
         return os.path.abspath(os.path.join(self.repo_path, self.allowed_directory))
 
+    @staticmethod
+    def _is_windows_drive_path(path: str) -> bool:
+        stripped = path.strip()
+        return len(stripped) >= 2 and stripped[0].isalpha() and stripped[1] == ":"
+
+    @staticmethod
+    def _is_unc_path(path: str) -> bool:
+        stripped = path.strip()
+        return stripped.startswith(("\\\\", "//"))
+
+    @staticmethod
+    def normalize_relative_path(rel_path: str) -> str:
+        """Normalize a relative workspace path to forward slashes without leading separators."""
+        return rel_path.strip().replace("\\", "/").lstrip("/")
+
+    def _prepare_workspace_path(self, rel_path: str) -> Optional[str]:
+        """Prepare a path for joining with repo_path, rejecting cross-OS absolute escapes."""
+        stripped = rel_path.strip()
+        if self._is_unc_path(stripped):
+            return None
+        if self._is_windows_drive_path(stripped):
+            if os.name != "nt":
+                return None
+            return stripped
+        return stripped.replace("\\", "/")
+
     def is_path_safe(self, abs_path: str) -> bool:
         """Validates that a resolved path resides strictly inside the repository root."""
         try:
@@ -56,7 +82,10 @@ class WorkspaceManager:
 
     def is_path_under_allowed_directory(self, rel_path: str) -> bool:
         """Validates that a path resides strictly inside the allowed directory."""
-        abs_path = os.path.abspath(os.path.join(self.repo_path, rel_path))
+        prepared = self._prepare_workspace_path(rel_path)
+        if prepared is None:
+            return False
+        abs_path = os.path.abspath(os.path.join(self.repo_path, prepared))
         if not self.is_path_safe(abs_path):
             return False
         try:
@@ -79,16 +108,20 @@ class WorkspaceManager:
             for file in files:
                 if not file.startswith("."):
                     rel_path = os.path.relpath(os.path.join(root, file), self.repo_path)
-                    files_list.append(rel_path)
+                    files_list.append(rel_path.replace("\\", "/"))
         return files_list
 
     def read_file(self, rel_path: str) -> str:
         """Read file contents safely within workspace and allowed_directory bounds."""
-        abs_path = os.path.abspath(os.path.join(self.repo_path, rel_path))
+        prepared = self._prepare_workspace_path(rel_path)
+        if prepared is None:
+            return f"Error: Path {rel_path} escapes repository root {self.repo_path}"
+        abs_path = os.path.abspath(os.path.join(self.repo_path, prepared))
         if not self.is_path_safe(abs_path):
             return f"Error: Path {rel_path} escapes repository root {self.repo_path}"
-        clean_rel = os.path.relpath(abs_path, self.repo_path)
-        if not clean_rel.startswith(".maca") and not self.is_path_under_allowed_directory(rel_path):
+        clean_rel = os.path.relpath(abs_path, self.repo_path).replace("\\", "/")
+        is_maca_internal = clean_rel == ".maca" or clean_rel.startswith(".maca/")
+        if not is_maca_internal and not self.is_path_under_allowed_directory(prepared):
             return f"Error: Path {rel_path} is outside allowed directory {self.allowed_directory}"
         try:
             with open(abs_path, "r", encoding="utf-8") as f:
@@ -98,7 +131,10 @@ class WorkspaceManager:
 
     def write_file(self, rel_path: str, content: str) -> str:
         """Write file contents safely within the workspace."""
-        abs_path = os.path.abspath(os.path.join(self.repo_path, rel_path))
+        prepared = self._prepare_workspace_path(rel_path)
+        if prepared is None:
+            return f"Error: Path {rel_path} escapes repository root {self.repo_path}"
+        abs_path = os.path.abspath(os.path.join(self.repo_path, prepared))
         if not self.is_path_safe(abs_path):
             return f"Error: Path {rel_path} escapes repository root {self.repo_path}"
         try:
@@ -114,14 +150,18 @@ class WorkspaceManager:
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Compute the file and line blocks modified or added in each file."""
         file_blocks: Dict[str, List[Dict[str, Any]]] = {}
+        normalized_existing: Dict[str, str] = {}
+        if existing_contents:
+            for k, v in existing_contents.items():
+                normalized_existing[self.normalize_relative_path(k)] = v
 
         for rel_path, new_content in files.items():
-            clean_rel_path = rel_path.strip().lstrip("/")
+            clean_rel_path = self.normalize_relative_path(rel_path)
             new_lines = new_content.splitlines(keepends=True)
 
             old_content = ""
-            if existing_contents and clean_rel_path in existing_contents:
-                old_content = existing_contents[clean_rel_path]
+            if normalized_existing and clean_rel_path in normalized_existing:
+                old_content = normalized_existing[clean_rel_path]
             else:
                 existing = self.read_file(clean_rel_path)
                 if not existing.startswith("Error"):
@@ -181,7 +221,17 @@ class WorkspaceManager:
         written_count = 0
 
         for rel_path, content in generated_files.items():
-            clean_rel_path = rel_path.strip().lstrip("/")
+            if self._is_unc_path(rel_path) or self._is_windows_drive_path(rel_path):
+                summary_records.append(
+                    {
+                        "path": rel_path,
+                        "action": "Failed: Sandbox escape blocked",
+                        "size": "0",
+                        "safe": False,
+                    }
+                )
+                continue
+            clean_rel_path = self.normalize_relative_path(rel_path)
             abs_path = os.path.abspath(os.path.join(self.repo_path, clean_rel_path))
 
             if not self.is_path_safe(abs_path):
@@ -252,7 +302,17 @@ class WorkspaceManager:
         written_count = 0
 
         for rel_path, content in files.items():
-            clean_rel_path = rel_path.strip().lstrip("/")
+            if self._is_unc_path(rel_path) or self._is_windows_drive_path(rel_path):
+                summary_records.append(
+                    {
+                        "path": rel_path,
+                        "action": "Failed: Staging escape blocked",
+                        "size": "0",
+                        "safe": False,
+                    }
+                )
+                continue
+            clean_rel_path = self.normalize_relative_path(rel_path)
             abs_staging_path = os.path.abspath(os.path.join(staging_dir, clean_rel_path))
 
             # Validate that staging file cannot escape the staging directory (including symlinks)
@@ -316,16 +376,22 @@ class WorkspaceManager:
         for root, _, files in os.walk(staging_dir):
             for file in files:
                 abs_path = os.path.join(root, file)
-                rel_path = os.path.relpath(abs_path, staging_dir)
+                rel_path = os.path.relpath(abs_path, staging_dir).replace("\\", "/")
                 staged_list.append(rel_path)
         return sorted(staged_list)
 
     def read_staging_file(self, task_name: str, rel_path: str) -> str:
         """Read a file from the task's staging directory."""
-        clean_rel = rel_path.strip().lstrip("/")
+        if self._is_unc_path(rel_path) or self._is_windows_drive_path(rel_path):
+            return f"Error reading staged file {rel_path}: staging escape blocked"
+        clean_rel = self.normalize_relative_path(rel_path)
         staging_dir = self.get_staging_dir(task_name)
         abs_path = os.path.abspath(os.path.join(staging_dir, clean_rel))
         try:
+            real_staging = os.path.realpath(staging_dir)
+            real_target = os.path.realpath(abs_path)
+            if os.path.commonpath([real_staging, real_target]) != real_staging:
+                return f"Error reading staged file {rel_path}: staging escape blocked"
             with open(abs_path, "r", encoding="utf-8") as f:
                 return f.read()
         except Exception as e:
@@ -387,7 +453,8 @@ class WorkspaceManager:
             target_to_remove = os.path.join(task_dir, "staging") if staging_only else task_dir
             if os.path.exists(target_to_remove) and self.is_path_safe(target_to_remove):
                 shutil.rmtree(target_to_remove, ignore_errors=True)
-                removed_paths.append(os.path.relpath(target_to_remove, self.repo_path))
+                rel_removed = os.path.relpath(target_to_remove, self.repo_path)
+                removed_paths.append(rel_removed.replace("\\", "/"))
 
         return len(removed_paths), removed_paths
 

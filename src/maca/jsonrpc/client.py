@@ -7,6 +7,7 @@ import sys
 import threading
 from typing import Any, Callable, Dict, Optional
 
+from maca import maca_config as config
 from maca.jsonrpc.protocol import (
     JSONRPC_VERSION,
     JsonRpcError,
@@ -45,6 +46,8 @@ class JsonRpcClient:
         existing = env.get("PYTHONPATH", "")
         if src_dir not in existing.split(os.pathsep):
             env["PYTHONPATH"] = f"{src_dir}{os.pathsep}{existing}" if existing else src_dir
+        env.setdefault("PYTHONUTF8", "1")
+        env["PYTHONIOENCODING"] = "utf-8"
         return env
 
     def _reader_loop(self, stdout_stream: Any, resp_queue: "queue.Queue[Optional[str]]") -> None:
@@ -93,6 +96,8 @@ class JsonRpcClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             env=env,
             bufsize=1,  # Line buffered
         )
@@ -122,11 +127,14 @@ class JsonRpcClient:
         effective_timeout = timeout if timeout is not None else self.default_timeout
         with self._lock:
             effective_params = dict(params) if params is not None else {}
-            effective_params["_env"] = {
+            env_payload: Dict[str, Any] = {
                 k: v
                 for k, v in os.environ.items()
                 if k.startswith(("MOCK_", "MACA_", "GEMINI_", "ANTHROPIC_"))
             }
+            if config.MOCK_GEMMA_FALLBACK and "MOCK_GEMMA_FALLBACK" not in env_payload:
+                env_payload["MOCK_GEMMA_FALLBACK"] = "true"
+            effective_params["_env"] = env_payload
 
             req_id = self._next_id()
             req = make_request(method, effective_params, req_id)
@@ -180,22 +188,32 @@ class JsonRpcClient:
     def close(self) -> None:
         """Terminate the persistent worker process and close open pipes."""
         if self._worker is not None:
+            worker = self._worker
+            reader_thread = self._reader_thread
+            self._worker = None
+            self._reader_thread = None
             try:
-                if self._worker.stdin and not self._worker.stdin.closed:
-                    self._worker.stdin.close()
-                if self._worker.stdout and not self._worker.stdout.closed:
-                    self._worker.stdout.close()
-                if self._worker.stderr and not self._worker.stderr.closed:
-                    self._worker.stderr.close()
-                if self._worker.poll() is None:
-                    self._worker.terminate()
-                    self._worker.wait(timeout=2.0)
+                if worker.stdin and not worker.stdin.closed:
+                    worker.stdin.close()
+                if worker.poll() is None:
+                    worker.terminate()
+                    worker.wait(timeout=2.0)
             except Exception:
-                if self._worker.poll() is None:
-                    self._worker.kill()
+                if worker.poll() is None:
+                    worker.kill()
+                    try:
+                        worker.wait(timeout=2.0)
+                    except Exception:
+                        pass
             finally:
-                self._worker = None
-                self._reader_thread = None
+                if reader_thread is not None and reader_thread is not threading.current_thread():
+                    reader_thread.join(timeout=1.0)
+                for stream in (worker.stdout, worker.stderr):
+                    if stream and not stream.closed:
+                        try:
+                            stream.close()
+                        except Exception:
+                            pass
 
     def __enter__(self) -> "JsonRpcClient":
         self._ensure_worker()

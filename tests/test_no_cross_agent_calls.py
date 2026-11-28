@@ -15,7 +15,7 @@ class TestNoCrossAgentCalls(unittest.TestCase):
         for py_file in src_root.rglob("*.py"):
             if py_file.name in ("orchestrator.py", "a2a_call_helper.py"):
                 continue
-            tree = ast.parse(py_file.read_text())
+            tree = ast.parse(py_file.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if (
                     isinstance(node, ast.Call)

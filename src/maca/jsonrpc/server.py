@@ -86,7 +86,19 @@ class JsonRpcServer:
                 self.stdout.flush()
 
 
+def _configure_utf8_streams() -> None:
+    """Ensure stdio streams use UTF-8 encoding on platforms defaulting to legacy code pages."""
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
 def run_server() -> None:
+    _configure_utf8_streams()
     server = JsonRpcServer()
     server.serve_forever()
 

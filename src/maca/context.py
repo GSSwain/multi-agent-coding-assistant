@@ -34,9 +34,23 @@ class TaskContext:
             return os.path.abspath(self.allowed_directory)
         return os.path.abspath(os.path.join(self.repo_path, self.allowed_directory))
 
+    @staticmethod
+    def _prepare_path(file_path: str) -> Optional[str]:
+        stripped = file_path.strip()
+        if stripped.startswith(("\\\\", "//")):
+            return None
+        if len(stripped) >= 2 and stripped[0].isalpha() and stripped[1] == ":":
+            if os.name != "nt":
+                return None
+            return stripped
+        return stripped.replace("\\", "/")
+
     def is_path_under_allowed_directory(self, file_path: str) -> bool:
         """Validates that a resolved path resides strictly inside the allowed directory for reading."""
-        abs_path = os.path.abspath(os.path.join(self.repo_path, file_path))
+        prepared = self._prepare_path(file_path)
+        if prepared is None:
+            return False
+        abs_path = os.path.abspath(os.path.join(self.repo_path, prepared))
         try:
             allowed_dir = self.abs_allowed_directory
             common = os.path.commonpath([allowed_dir, abs_path])
@@ -46,7 +60,10 @@ class TaskContext:
 
     def is_path_in_workspace(self, file_path: str) -> bool:
         """Validates that a resolved path resides strictly inside the workspace repository root."""
-        abs_path = os.path.abspath(os.path.join(self.repo_path, file_path))
+        prepared = self._prepare_path(file_path)
+        if prepared is None:
+            return False
+        abs_path = os.path.abspath(os.path.join(self.repo_path, prepared))
         try:
             repo_root = os.path.abspath(self.repo_path)
             common = os.path.commonpath([repo_root, abs_path])

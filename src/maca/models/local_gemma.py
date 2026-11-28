@@ -1,5 +1,6 @@
 import json
-import urllib.error
+import shutil
+import subprocess
 import urllib.request
 
 from maca import maca_config as config
@@ -13,8 +14,6 @@ class LocalGemmaClient:
     def generate(self, prompt, system_instruction=""):
         if config.MOCK_GEMMA_FALLBACK:
             return self._generate_mock(prompt, system_instruction)
-
-        import subprocess
 
         # Combine system instruction and prompt
         full_prompt = prompt
@@ -39,11 +38,14 @@ class LocalGemmaClient:
             try:
                 # Run: ollama run model "prompt"
                 # We pass prompt through stdin to avoid command line length limits
+                ollama_exe = shutil.which("ollama") or "ollama"
                 res = subprocess.run(
-                    ["ollama", "run", self.model],
+                    [ollama_exe, "run", self.model],
                     input=full_prompt,
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=30,
                 )
                 if res.returncode == 0:

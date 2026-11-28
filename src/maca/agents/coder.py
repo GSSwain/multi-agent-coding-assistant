@@ -37,14 +37,18 @@ class BaseCoderAgent(BaseAgent):
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Compute the file and line blocks modified or added in each file."""
         file_blocks: Dict[str, List[Dict[str, Any]]] = {}
+        normalized_repo_content: Dict[str, str] = {}
+        if repo_files_content:
+            for k, v in repo_files_content.items():
+                normalized_repo_content[k.strip().replace("\\", "/").lstrip("/")] = v
 
         for rel_path, new_content in files.items():
-            clean_rel_path = rel_path.strip().lstrip("/")
+            clean_rel_path = rel_path.strip().replace("\\", "/").lstrip("/")
             new_lines = new_content.splitlines(keepends=True)
 
             old_content = ""
-            if repo_files_content and clean_rel_path in repo_files_content:
-                old_content = repo_files_content[clean_rel_path]
+            if normalized_repo_content and clean_rel_path in normalized_repo_content:
+                old_content = normalized_repo_content[clean_rel_path]
             else:
                 existing = self.read_file(clean_rel_path)
                 if not existing.startswith("Error"):
