@@ -95,10 +95,7 @@ class ReviewerAgent(BaseAgent):
             plan_or_spec=plan_or_spec,
             file_blocks=file_blocks,
         )
-        try:
-            response = str(self.model_client.generate(prompt, system_instruction))
-        except Exception as e:
-            raise RuntimeError(f"Agent {self.name} failed during generation: {e}") from e
+        response = self._generate(prompt, system_instruction)
 
         if task_name:
             approved = self.is_approved(response)

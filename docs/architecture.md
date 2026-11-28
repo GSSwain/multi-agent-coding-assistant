@@ -106,6 +106,7 @@ flowchart TD
 | **LocalModelSelector** | `maca.local_model_selector` | Detects total system memory across Linux, Windows, and Unix, reserves 10 GB OS headroom, selects the optimal Gemma 4 Ollama model and context window (`num_ctx`), and persists settings to `~/.maca/local_model.env`. |
 | **ModelRouter** | `maca.models.router` | Selects optimal model client based on complexity evaluation, overrides, and health status. |
 | **HistoryCompactor** | `maca.history_compactor` | Deterministically compacts older conversation turns into a bounded rolling summary while retaining recent turns verbatim in agent payloads. |
+| **TokenBudgeter** | `maca.token_budget` | Enforces pre-flight input token budgets with completion headroom and head+tail truncation to prevent silent local context truncation. |
 
 ## Workflow Stages & Pipeline
 The multi-agent workflow is structured into cohesive stages coordinated by `WorkflowPipeline` (`src/maca/pipeline.py`):
@@ -186,6 +187,16 @@ To provide context engineering and explicit repository boundaries across agent i
 - Every A2A call helper invocation passes this structured context, and each agent returns completion and update metadata back to the Orchestrator.
 - **Compact IPC Context Deduplication**: When `build_agent_payload` (`src/maca/stages/common.py`) constructs stage IPC payloads where `plan`, `spec`, or `plan_or_spec` are already provided as top-level payload keys, it serializes `payload["context"]` via `TaskContext.to_compact_dict(omit_plan=..., omit_spec=...)`. Omitted bodies are replaced with lightweight metadata (`plan_omitted`/`plan_chars` and `spec_omitted`/`spec_chars`) to avoid duplicating large plan/spec text across JSON-RPC messages, while `TaskContext.to_dict()` remains full and unchanged for `.maca/<task>/task.json` persistence.
 - **Strict Directory & Workspace Enforcement**: Every agent (via `BaseAgent.read_file`) and `WorkspaceManager.read_file` verify that any file read resides strictly under the `allowed_directory` (read-only boundary). For modifications, `BaseAgent.write_file` and `WorkspaceManager.write_file` / `apply_changes` verify that modifications reside strictly within the target `workspace` (`repo_path`), preventing sandbox escapes. Attempts to read outside `allowed_directory` or write outside `workspace` are automatically rejected.
+
+## Pre-Flight Token Budgeting
+To prevent local runtimes (such as Ollama/Gemma) from silently truncating prompts while keeping cloud models unconstrained by small local defaults:
+- **`src/maca/token_budget.py`** provides deterministic token estimation (`estimate_tokens`), output-headroom calculation (`compute_input_budget`), and budget enforcement (`enforce_token_budget` returning a frozen `TokenBudgetResult`).
+- **Model-Aware Context Discovery**:
+  - `LocalGemmaClient.get_context_window()` queries Ollama `POST /api/show` (3s timeout, cached in-memory per `(url, model)`) to inspect `model_info` `*.context_length` and `parameters` `num_ctx`, capping with `OLLAMA_NUM_CTX` when configured and falling back gracefully to `CONTEXT_TOKEN_BUDGET` when offline or in mock mode.
+  - `GeminiClient.get_context_window()` and `ClaudeClient.get_context_window()` return smart configured defaults (`MACA_GEMINI_CONTEXT_WINDOW`, default `1048576`; `MACA_CLAUDE_CONTEXT_WINDOW`, default `200000`) with zero cloud metadata API calls.
+- **`BaseAgent._resolve_context_budget` & `BaseAgent._generate`** resolve the active model's context window (honoring `CONTEXT_BUDGET_ENABLED` and explicit `MACA_CONTEXT_TOKEN_BUDGET` overrides) and run pre-flight token budgeting before invoking `model_client.generate(...)` across all `BaseAgent` subclasses (`PlannerAgent`, `SpecAgent`, `SimpleCoderAgent`, `SpecCoderAgent`, `ReviewerAgent`, `ClarifierAgent`, `CodeCompletionVerifierAgent`).
+- When estimated input tokens fit within the budget, prompts and system instructions pass through untouched. When over budget, `system_instruction` is preserved alongside the opening task/plan (head) and closing directives/nudges (tail) of the prompt, inserting an explicit `[... truncated N chars to fit context budget ...]` marker and logging an actionable warning.
+- Configured via `MACA_CONTEXT_TOKEN_BUDGET` (optional global override; `0` disables), `OLLAMA_NUM_CTX`, `MACA_GEMINI_CONTEXT_WINDOW`, `MACA_CLAUDE_CONTEXT_WINDOW`, `MACA_CONTEXT_OUTPUT_RESERVE_RATIO` (default `0.30`, clamped to `0.05..0.80`), and `MACA_CONTEXT_BUDGET_ENABLED` (default `true`).
 
 ---
 

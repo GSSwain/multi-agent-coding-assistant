@@ -1,7 +1,13 @@
 import abc
+import logging
 import os
 import re
 from typing import Any, Dict, List, Optional
+
+from maca import maca_config as config
+from maca.token_budget import TokenBudgetResult, enforce_token_budget
+
+logger = logging.getLogger(__name__)
 
 
 class BaseAgent(abc.ABC):
@@ -16,6 +22,7 @@ class BaseAgent(abc.ABC):
         self.model_client = model_client
         self.repo_path = os.path.abspath(repo_path)
         self.allowed_directory = allowed_directory or "."
+        self.last_budget_result: Optional[TokenBudgetResult] = None
 
     @property
     def abs_allowed_directory(self) -> str:
@@ -79,16 +86,57 @@ class BaseAgent(abc.ABC):
         """Subclasses must implement this to return the user prompt."""
         pass
 
+    def _resolve_context_budget(self) -> int:
+        """Resolve the effective context window budget for the active model client."""
+        if not config.CONTEXT_BUDGET_ENABLED:
+            return 0
+        if config.CONTEXT_TOKEN_BUDGET_OVERRIDE is not None:
+            return int(config.CONTEXT_TOKEN_BUDGET_OVERRIDE)
+
+        getter = getattr(self.model_client, "get_context_window", None)
+        if callable(getter):
+            try:
+                discovered = getter()
+            except Exception:
+                discovered = None
+            if isinstance(discovered, int) and not isinstance(discovered, bool):
+                if discovered > 0:
+                    return discovered
+
+        return int(config.CONTEXT_TOKEN_BUDGET)
+
+    def _generate(self, prompt: str, system_instruction: str = "") -> str:
+        """Apply pre-flight token budgeting and invoke the model client."""
+        final_prompt = prompt
+        final_system = system_instruction
+        self.last_budget_result = None
+
+        max_context_tokens = self._resolve_context_budget()
+        if max_context_tokens > 0:
+            budget_result = enforce_token_budget(
+                prompt=prompt,
+                system_instruction=system_instruction,
+                max_context_tokens=max_context_tokens,
+                output_reserve_ratio=config.CONTEXT_OUTPUT_RESERVE_RATIO,
+            )
+            self.last_budget_result = budget_result
+            final_prompt = budget_result.prompt
+            final_system = budget_result.system_instruction
+            if budget_result.trimmed and budget_result.warning:
+                logger.warning("[%s] %s", self.name, budget_result.warning)
+
+        try:
+            return str(self.model_client.generate(final_prompt, final_system))
+        except Exception as e:
+            raise RuntimeError(f"Agent {self.name} failed during generation: {e}") from e
+
     def run(self, *args: Any, **kwargs: Any) -> str:
         """Consolidated run method implementing the template pattern.
         Constructs instructions and prompt, then invokes model generation.
         """
         system_instruction = self._build_system_instruction(*args, **kwargs)
         prompt = self._build_prompt(*args, **kwargs)
-        try:
-            return str(self.model_client.generate(prompt, system_instruction))
-        except Exception as e:
-            raise RuntimeError(f"Agent {self.name} failed during generation: {e}") from e
+        return self._generate(prompt, system_instruction)
 
     def _is_path_safe(self, abs_path: str) -> bool:
         """Validates that a resolved path resides inside the repository root."""

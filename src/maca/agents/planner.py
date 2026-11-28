@@ -67,10 +67,7 @@ class PlannerAgent(BaseAgent):
             history=history,
             repo_map=repo_map,
         )
-        try:
-            plan = str(self.model_client.generate(prompt, system_instruction))
-        except Exception as e:
-            raise RuntimeError(f"Agent {self.name} failed during generation: {e}") from e
+        plan = self._generate(prompt, system_instruction)
 
         if task_name:
             todo_text = (

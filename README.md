@@ -30,6 +30,7 @@ MACA is a **local-first, hybrid AI coding assistant** that routes work by comple
   - **Reviewer Agent:** audits code with line-level diff blocks for logic, syntax, and safety, looping with corrections until approved.
 - **Auto-apply workflow:** updates your files directly in the current workspace.
 - **Task isolation & todo tracking:** tracks step-by-step progress and continuation state inside `.maca/<task>/`.
+- **Pre-flight model-aware context token budgeting:** resolves the active model's context window (querying Ollama `POST /api/show` with caching for local models and using smart defaults for Gemini/Claude), reserves completion headroom, and head+tail trims oversized prompts with explicit truncation markers and warnings to prevent silent local context truncation.
 - **Robust fallbacks:** handles blocked Ollama ports, offline/mock mode, and terminal output fallback paths without breaking the experience.
 
 ---
@@ -240,13 +241,24 @@ MACA uses Google Gemini and Anthropic Claude for medium and above tasks. For sec
   export CLAUDE_API_KEY="your-claude-api-key"
   ```
 
-  You can optionally customize the models and request timeouts (in seconds):
+  You can optionally customize the models, request timeouts (in seconds), and pre-flight context token budget:
   ```bash
   export GEMINI_MODEL="gemini-3.5-flash"
   export GEMINI_TIMEOUT_SECONDS="120"
 
   export CLAUDE_MODEL="claude-opus-4-8"
   export CLAUDE_TIMEOUT_SECONDS="120"
+
+  # Model-aware pre-flight context token budgeting
+  # Global override (optional; forces cap across all models, or set 0 to disable)
+  export MACA_CONTEXT_TOKEN_BUDGET="16384"
+  # Smart cloud context window defaults (no metadata API calls)
+  export MACA_GEMINI_CONTEXT_WINDOW="1048576"
+  export MACA_CLAUDE_CONTEXT_WINDOW="200000"
+  # Fraction of context reserved for model output (clamped to 0.05..0.80, default: 0.30)
+  export MACA_CONTEXT_OUTPUT_RESERVE_RATIO="0.30"
+  # Toggle pre-flight token budgeting on/off (default: true)
+  export MACA_CONTEXT_BUDGET_ENABLED="true"
   ```
 
 * **Quick Env Setup (Windows PowerShell)**:
