@@ -50,7 +50,7 @@ flowchart TD
     subgraph Step5 ["Step 5: Code Completion Verification Loop (max 10 iterations)"]
         StagedFiles --> Verifier["CodeCompletionVerifierAgent"]
         Verifier --> VerifierDecision{"All Plan Steps\nCompleted?"}
-        VerifierDecision -->|"NO: Missing steps"| NudgeVerifier["Orchestrator Nudge:\nResume from .todo pending items"]
+        VerifierDecision -->|"NO: Missing steps"| NudgeVerifier["Orchestrator Nudge:\nResume from .todo with delta file context"]
         NudgeVerifier -->|"Flush incremental updates to staging"| Coder
     end
 
@@ -64,7 +64,7 @@ flowchart TD
     subgraph Step7 ["Step 7: Reviewer Audit & Correction Loop (max 10 iterations)"]
         DiskStaging --> Reviewer["ReviewerAgent\n(Audits staged files & line diffs)"]
         Reviewer --> ReviewerDecision{"Review Decision:\nClean Code & Correct?"}
-        ReviewerDecision -->|"REVISIONS REQUESTED"| NudgeReviewer["Orchestrator Nudge:\nPass Reviewer feedback & file blocks"]
+        ReviewerDecision -->|"REVISIONS REQUESTED"| NudgeReviewer["Orchestrator Nudge:\nPass Reviewer feedback & delta file context"]
         NudgeReviewer -->|"Flush corrections to staging"| Coder
     end
 
@@ -99,6 +99,7 @@ flowchart TD
 | **CodeCompletionVerifierAgent** | `maca.agents.code_completion_verifier` | Verifies whether all planned steps in the specification are fully implemented. |
 | **ReviewerAgent** | `maca.agents.reviewer` | Audits code for clean code guidelines, bug safety, and gives approval or corrections. |
 | **WorkspaceManager** | `maca.workspace` | Handles safe file reading, writing, and repository directory walking within sandbox boundaries. |
+| **DeltaContext** | `maca.delta_context` | Builds delta-only file context (full content for referenced files, compact 1-line summaries for unchanged files) and targeted unified diffs for verifier and reviewer nudges. |
 | **JsonRpcService** | `maca.jsonrpc` | Persistent JSON-RPC 2.0 agent worker and client managing stdio RPC communication. |
 | **BackendHealthService** | `maca.health` | Probes local and remote model connectivity and API status. |
 | **LocalModelSelector** | `maca.local_model_selector` | Detects total system memory across Linux, Windows, and Unix, reserves 10 GB OS headroom, selects the optimal Gemma 4 Ollama model and context window (`num_ctx`), and persists settings to `~/.maca/local_model.env`. |
@@ -114,11 +115,11 @@ The multi-agent workflow is structured into cohesive stages coordinated by `Work
 2. **CodingStage** (`src/maca/stages/coding.py`):
    - Executes code generation (`SimpleCoderAgent` for simple tasks, `SpecCoderAgent` for complex tasks).
    - Runs iterative verification loop with `CodeCompletionVerifierAgent` (up to 10 iterations) to guarantee completeness.
-   - Nudges coder with remaining items from `.maca/<task>/coder.todo`.
+   - Nudges coder with remaining items from `.maca/<task>/coder.todo` and delta-only file context (`maca.delta_context.build_delta_file_context`) so unmentioned unchanged files are compacted into 1-line summaries.
 3. **ReviewStage** (`src/maca/stages/review.py`):
    - Flushes and checkpoints code to the staging directory (`.maca/<task>/staging/`) before the reviewer inspects them, checkpointing changes and recording metadata in `.maca/<task>/progress.md` and `.maca/<task>/task.json` while keeping the active workspace clean.
    - Audits changes with `ReviewerAgent` against the staged files and modified line blocks relative to the existing repository.
-   - Runs reviewer correction loop (up to 10 iterations) until approved, updating staged files when nudging the coder to fix identified issues.
+   - Runs reviewer correction loop (up to 10 iterations) until approved, passing delta-only file context via `maca.delta_context.build_delta_file_context` and updating staged files when nudging the coder to fix identified issues.
    - Upon final approval, `promote_staging_files` in `WorkflowPipeline` safely applies the staged files to the real repository.
 
 ## Framework Bootstrap Clarification & Language Fidelity

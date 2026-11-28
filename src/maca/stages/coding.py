@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 from maca import maca_config as config
 from maca.agents.coder import SimpleCoderAgent, SpecCoderAgent
 from maca.context import TaskContext
+from maca.delta_context import build_delta_file_context
 from maca.rich_compat import Console
 from maca.stages.common import (
     _get_orch_attr,
@@ -192,6 +193,7 @@ class CodingStage:
                 f"{feedback}\n\n"
                 f"Please continue implementing the missing parts and output the complete updated files."
             )
+            delta_files = build_delta_file_context(repo_files_content, generated_files, feedback)
             updated_blocks = NudgeLoopRunner.run_nudge_iteration(
                 run_coder_fn=self.run_coder_step,
                 apply_update_fn=lambda updated_files, summary_label, persist_changes: (
@@ -212,7 +214,7 @@ class CodingStage:
                 task_description=task_description,
                 plan=plan,
                 spec=spec,
-                repo_files_content={**repo_files_content, **generated_files},
+                repo_files_content=delta_files,
                 client=client,
                 model_name=model_name,
                 task_context=task_context,
