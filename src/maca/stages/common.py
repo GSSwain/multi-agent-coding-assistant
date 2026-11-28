@@ -2,6 +2,7 @@ import sys
 from typing import Any, Dict, Optional
 
 from maca.context import TaskContext
+from maca.history_compactor import compact_conversation_history
 
 
 def _is_mock(obj: Any) -> bool:
@@ -29,10 +30,19 @@ def build_agent_payload(
     orch: Any, task_context: TaskContext, model_name: str, **kwargs: Any
 ) -> Dict[str, Any]:
     """Constructs canonical payload for A2A IPC calls via orchestrator."""
+    raw_history = getattr(orch, "conversation_history", [])
+    history_payload: Any
+    if isinstance(raw_history, (list, tuple)):
+        compacted_history, summary = compact_conversation_history(raw_history)
+        if summary:
+            task_context.history_summary = summary
+        history_payload = compacted_history
+    else:
+        history_payload = raw_history
     payload = {
         "task_name": task_context.task_name,
         "task_description": task_context.task,
-        "history": orch.conversation_history,
+        "history": history_payload,
         "model_name": model_name,
         "repo_path": orch.repo_path,
         "allowed_directory": orch.allowed_directory,

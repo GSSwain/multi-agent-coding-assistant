@@ -23,6 +23,7 @@ class TaskContext:
     todo_status: Dict[str, Any] = field(default_factory=dict)
     agent_updates: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     bootstrap_config: Dict[str, str] = field(default_factory=dict)
+    history_summary: str = ""
     updated_at: str = field(
         default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     )
@@ -108,6 +109,7 @@ class TaskContext:
             "todo_status": self.todo_status,
             "agent_updates": self.agent_updates,
             "bootstrap_config": self.bootstrap_config,
+            "history_summary": self.history_summary,
             "updated_at": self.updated_at,
         }
 
@@ -125,6 +127,7 @@ class TaskContext:
             todo_status=data.get("todo_status", {}),
             agent_updates=data.get("agent_updates", {}),
             bootstrap_config=data.get("bootstrap_config", {}),
+            history_summary=str(data.get("history_summary") or ""),
             updated_at=data.get("updated_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
         )
 

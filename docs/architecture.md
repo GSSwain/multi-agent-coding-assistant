@@ -105,6 +105,7 @@ flowchart TD
 | **BackendHealthService** | `maca.health` | Probes local and remote model connectivity and API status. |
 | **LocalModelSelector** | `maca.local_model_selector` | Detects total system memory across Linux, Windows, and Unix, reserves 10 GB OS headroom, selects the optimal Gemma 4 Ollama model and context window (`num_ctx`), and persists settings to `~/.maca/local_model.env`. |
 | **ModelRouter** | `maca.models.router` | Selects optimal model client based on complexity evaluation, overrides, and health status. |
+| **HistoryCompactor** | `maca.history_compactor` | Deterministically compacts older conversation turns into a bounded rolling summary while retaining recent turns verbatim in agent payloads. |
 
 ## Workflow Stages & Pipeline
 The multi-agent workflow is structured into cohesive stages coordinated by `WorkflowPipeline` (`src/maca/pipeline.py`):
@@ -178,6 +179,7 @@ To provide context engineering and explicit repository boundaries across agent i
   - `allowed_directory`: Root directory boundary permitted for reading context files (defaults to `"."`).
   - `plan` & `spec`: Structured implementation plan and formal specification documents.
   - `bootstrap_config`: Resolved architectural choices (framework, build tool, runtime version, language).
+  - `history_summary`: Rolling bullet summary of compacted older conversation turns populated automatically when conversation history exceeds the recent-turn window (`MACA_HISTORY_RECENT_TURNS`, default `3`).
   - `todo_status`: Aggregated checklist status across all agents from `.maca/<task>/<agent>.todo`.
   - `agent_updates`: Status dictionary tracking completion (`completed: bool`) and details from each agent.
 - Every A2A call helper invocation passes this structured context, and each agent returns completion and update metadata back to the Orchestrator.
