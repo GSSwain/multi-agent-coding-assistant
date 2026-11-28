@@ -160,11 +160,13 @@ class JsonRpcDispatcher:
             if "repo_files" in params and params["repo_files"] is not None
             else agent.list_files()
         )
+        repo_map = str(params.get("repo_map") or context.get("repo_map", "") or "")
         result = agent.run(
             task_description=task_desc,
             repo_files=repo_files,
             history=params.get("history"),
             task_name=task_name,
+            repo_map=repo_map,
         )
         return {
             "result": result,

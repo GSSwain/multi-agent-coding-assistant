@@ -87,9 +87,15 @@ class WorkflowPipeline:
         )
 
     def _collect_repo_files_content(
-        self, repo_files: List[str], plan: str, spec: str
+        self,
+        repo_files: List[str],
+        plan: str,
+        spec: str,
+        summarize_references: bool = False,
     ) -> Dict[str, str]:
-        return self.coding_stage.collect_repo_files_content(repo_files, plan, spec)
+        return self.coding_stage.collect_repo_files_content(
+            repo_files, plan, spec, summarize_references=summarize_references
+        )
 
     def _run_coder_step(
         self,

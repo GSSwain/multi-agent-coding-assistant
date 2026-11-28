@@ -4,6 +4,10 @@ from maca import maca_config as config
 from maca.agents.coder import SimpleCoderAgent, SpecCoderAgent
 from maca.context import TaskContext
 from maca.delta_context import build_delta_file_context
+from maca.repo_summarizer import (
+    classify_target_vs_reference_files,
+    summarize_file_source,
+)
 from maca.rich_compat import Console
 from maca.stages.common import (
     _get_orch_attr,
@@ -25,17 +29,41 @@ class CodingStage:
         self.orch = orchestrator
 
     def collect_repo_files_content(
-        self, repo_files: List[str], plan: str, spec: str
+        self,
+        repo_files: List[str],
+        plan: str,
+        spec: str,
+        summarize_references: bool = False,
+        reference_max_lines: int = 40,
     ) -> Dict[str, str]:
-        repo_files_content = {}
-        plan_lower = plan.lower().replace("\\", "/")
-        spec_lower = spec.lower().replace("\\", "/")
+        repo_files_content: Dict[str, str] = {}
+        if not summarize_references:
+            plan_lower = plan.lower().replace("\\", "/")
+            spec_lower = spec.lower().replace("\\", "/")
+            for filepath in repo_files:
+                norm_path = filepath.replace("\\", "/").lower()
+                if norm_path in spec_lower or norm_path in plan_lower:
+                    content = self.orch.workspace.read_file(filepath)
+                    if not content.startswith("Error"):
+                        repo_files_content[filepath] = content
+            return repo_files_content
+
+        target_files, reference_files = classify_target_vs_reference_files(repo_files, plan, spec)
+        target_set = set(target_files)
+        reference_set = set(reference_files)
         for filepath in repo_files:
-            norm_path = filepath.replace("\\", "/").lower()
-            if norm_path in spec_lower or norm_path in plan_lower:
-                content = self.orch.workspace.read_file(filepath)
-                if not content.startswith("Error"):
-                    repo_files_content[filepath] = content
+            if filepath not in target_set and filepath not in reference_set:
+                continue
+            content = self.orch.workspace.read_file(filepath)
+            if content.startswith("Error"):
+                continue
+            if filepath in reference_set:
+                summary = summarize_file_source(filepath, content, max_lines=reference_max_lines)
+                repo_files_content[filepath] = (
+                    f"[Read-only reference summary]\n{summary}" if summary else content
+                )
+            else:
+                repo_files_content[filepath] = content
         return repo_files_content
 
     def run_coder_step(
