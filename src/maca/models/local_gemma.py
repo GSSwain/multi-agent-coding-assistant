@@ -2,6 +2,7 @@ import json
 import shutil
 import subprocess
 import urllib.request
+from typing import Any, Dict
 
 from maca import maca_config as config
 
@@ -22,11 +23,16 @@ class LocalGemmaClient:
 
         # 1. Try HTTP API
         try:
+            payload: Dict[str, Any] = {
+                "model": self.model,
+                "prompt": full_prompt,
+                "stream": False,
+            }
+            if config.OLLAMA_NUM_CTX > 0:
+                payload["options"] = {"num_ctx": config.OLLAMA_NUM_CTX}
             req = urllib.request.Request(
                 f"{self.url}/api/generate",
-                data=json.dumps(
-                    {"model": self.model, "prompt": full_prompt, "stream": False}
-                ).encode("utf-8"),
+                data=json.dumps(payload).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )

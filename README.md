@@ -17,7 +17,7 @@ MACA is a **local-first, hybrid AI coding assistant** that routes work by comple
 ## 🚀 Core Features
 
 - **Smart task routing:** analyzes each request and sends it to the best backend for the job.
-  - **Simple tasks:** local Gemma (`gemma2:2b`) via Ollama.
+  - **Simple tasks:** local **Gemma 4** via Ollama, automatically selected from available system RAM (reserving 10 GB free for the OS and other apps).
   - **Medium complexity tasks:** Google Gemini (`gemini-3.5-flash`) via REST API. If Gemini is offline/unconfigured, falls back to Anthropic Claude, then local Gemma.
   - **Complex / Very Complex tasks:** Anthropic Claude (default `claude-opus-4-8` or custom model) via Messages API. If Claude is offline/unconfigured, falls back to Google Gemini, then local Gemma.
 - **7-Agent autonomous orchestration:** specialized agents collaborate through a staged pipeline coordinated by the Orchestrator.
@@ -116,7 +116,7 @@ flowchart TD
 
 MACA evaluates task complexity before selecting a model to execute the coding assignment:
 - **Complexity Assessment**:
-  - The **Task Router** queries the local Gemma model (gemma2:2b via Ollama) to analyze the user prompt and classify it into one of four categories: SIMPLE, MEDIUM, COMPLEX, or VERY_COMPLEX.
+  - The **Task Router** queries the locally selected Gemma 4 model via Ollama to analyze the user prompt and classify it into one of four categories: SIMPLE, MEDIUM, COMPLEX, or VERY_COMPLEX.
   - *Fallback Heuristic*: If Gemma/Ollama is offline, the router falls back to a regex-based keyword density and word count heuristic classifier to make a prediction.
 - **Model Assignment & Fallbacks**:
   - **SIMPLE Tasks**: Handled entirely locally by the **Local Gemma Client** to minimize latency and token usage.
@@ -191,7 +191,47 @@ Use the cross-platform launcher scripts under [local/scripts](local/scripts):
   .\local\scripts\setup_gemma.ps1
   ```
 
-### 2. Configure API Keys (Environment or OS Secret Storage)
+### 2. Local Model Selection (Memory-Aware Gemma 4 on Ollama)
+During setup, `./local/scripts/setup_gemma.sh` (Linux / Unix) and `.\local\scripts\setup_gemma.ps1` (Windows PowerShell) automatically detect total system memory, reserve **10 GB free for the OS and other applications**, enable `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q8_0`, and pull the best-fitting **Gemma 4** model on Ollama:
+
+| System RAM | Available Model Budget (10 GB OS Headroom) | Selected Gemma 4 Model | Approx. Size | Context Window (`OLLAMA_NUM_CTX`) |
+| :--- | :--- | :--- | :--- | :--- |
+| `>= 40 GB` | `>= 30 GB` | `gemma4:26b-a4b-it-q8_0` | ~28 GB | 32K (`32768`) |
+| `28–39 GB` | `18–29 GB` | `gemma4:26b` (`Q4_K_M`) | ~16 GB | 16K (`16384`) |
+| `16–27 GB` | `6–17 GB` | `hf.co/crucible-labs/Gemma4-26B-A4B-REAP-25-GGUF:Q3_K-mixed` | ~10.3 GB | 8K–16K (`16384` at `>= 18 GB`, `8192` below `18 GB`) |
+| `12–15 GB` | `2–5 GB` | `gemma4:e4b` | ~5 GB | 8K (`8192`) |
+| `< 12 GB` | `< 2 GB` | `gemma4:e2b` | ~4 GB | 8K (`8192`) |
+
+* **Automatic Persistence**: Both `setup_gemma.sh` and `setup_gemma.ps1` save the chosen `OLLAMA_MODEL`, `OLLAMA_NUM_CTX`, `OLLAMA_KV_CACHE_TYPE`, and `OLLAMA_FLASH_ATTENTION` settings to `~/.maca/local_model.env` (override path with `MACA_LOCAL_MODEL_CONFIG`), so `maca` automatically uses the installed model and context length at runtime.
+* **Manual Overrides**:
+  - **Linux / Unix** (CLI flags or environment variables):
+    ```bash
+    # Override via setup script flags
+    ./local/scripts/setup_gemma.sh --model gemma4:e4b
+    ./local/scripts/setup_gemma.sh --headroom-gb 12
+
+    # Or override at runtime / setup via environment variables
+    export OLLAMA_MODEL="gemma4:26b"
+    export OLLAMA_NUM_CTX="16384"
+    export MACA_OS_HEADROOM_GB="10"
+    ```
+  - **Windows (PowerShell)** (script parameters or environment variables):
+    ```powershell
+    # Override via setup script parameters
+    .\local\scripts\setup_gemma.ps1 -Model "gemma4:e4b"
+    .\local\scripts\setup_gemma.ps1 -HeadroomGb 12
+
+    # Or override at runtime / setup via environment variables
+    $env:OLLAMA_MODEL="gemma4:26b"
+    $env:OLLAMA_NUM_CTX="16384"
+    $env:MACA_OS_HEADROOM_GB="10"
+    ```
+  - You can also inspect or write the selection directly via Python on any OS:
+    ```sh
+    python -m maca.local_model_selector --model gemma4:e4b --write-config
+    ```
+
+### 3. Configure API Keys (Environment or OS Secret Storage)
 MACA uses Google Gemini and Anthropic Claude for medium and above tasks. For secure OS-specific credential storage instructions (Linux `secret-tool`, Windows Credential Manager, and macOS Keychain), see [docs/keys_setup.md](docs/keys_setup.md).
 
 * **Quick Env Setup (Linux / Unix)**:
@@ -238,7 +278,7 @@ MACA uses Google Gemini and Anthropic Claude for medium and above tasks. For sec
   ```
   This keeps secrets out of plain-text shell config files while making `GEMINI_API_KEY` and `CLAUDE_API_KEY` available to MACA in new sessions.
 
-### 3. Run tests
+### 4. Run tests
 **Linux / Unix:**
 ```sh
 PYTHONPATH=src python -m unittest discover -s tests -v
@@ -249,7 +289,7 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 $env:PYTHONPATH="src"; python -m unittest discover -s tests -v
 ```
 
-### 4. Development & Static Analysis
+### 5. Development & Static Analysis
 We enforce code quality and security checks on both local builds and CI pipelines:
 - **Ruff**: Code linting and formatting (auto-runs on commit).
 - **Mypy**: Strict type-checking.

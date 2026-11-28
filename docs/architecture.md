@@ -101,6 +101,7 @@ flowchart TD
 | **WorkspaceManager** | `maca.workspace` | Handles safe file reading, writing, and repository directory walking within sandbox boundaries. |
 | **JsonRpcService** | `maca.jsonrpc` | Persistent JSON-RPC 2.0 agent worker and client managing stdio RPC communication. |
 | **BackendHealthService** | `maca.health` | Probes local and remote model connectivity and API status. |
+| **LocalModelSelector** | `maca.local_model_selector` | Detects total system memory across Linux, Windows, and Unix, reserves 10 GB OS headroom, selects the optimal Gemma 4 Ollama model and context window (`num_ctx`), and persists settings to `~/.maca/local_model.env`. |
 | **ModelRouter** | `maca.models.router` | Selects optimal model client based on complexity evaluation, overrides, and health status. |
 
 ## Workflow Stages & Pipeline
