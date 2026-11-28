@@ -266,6 +266,21 @@ class TestTokenBudget(unittest.TestCase):
                 with mock.patch("urllib.request.urlopen", return_value=resp):
                     self.assertEqual(client.get_context_window(), 2048)
 
+    def test_local_gemma_caps_large_model_window_with_config_ollama_num_ctx(self):
+        client = LocalGemmaClient()
+        payload = {"model_info": {"gemma4.context_length": 262144}}
+        resp = _make_json_response(payload)
+
+        with mock.patch.object(config, "MOCK_GEMMA_FALLBACK", False):
+            with mock.patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("OLLAMA_NUM_CTX", None)
+                with mock.patch("urllib.request.urlopen", return_value=resp) as mock_urlopen:
+                    with mock.patch.object(config, "OLLAMA_NUM_CTX", 32768):
+                        self.assertEqual(client.get_context_window(), 32768)
+                    with mock.patch.object(config, "OLLAMA_NUM_CTX", 16384):
+                        self.assertEqual(client.get_context_window(), 16384)
+        mock_urlopen.assert_called_once()
+
     def test_local_gemma_mock_mode_skips_http(self):
         client = LocalGemmaClient()
 

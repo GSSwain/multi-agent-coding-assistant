@@ -164,9 +164,10 @@ _raw_context_budget = _raw_explicit_budget
 if _raw_context_budget is None or not _raw_context_budget.strip():
     _raw_context_budget = os.environ.get("OLLAMA_NUM_CTX")
 
-CONTEXT_TOKEN_BUDGET: int = _parse_int_env(_raw_context_budget, 16384)
+_default_local_budget = OLLAMA_NUM_CTX if OLLAMA_NUM_CTX > 0 else 16384
+CONTEXT_TOKEN_BUDGET: int = _parse_int_env(_raw_context_budget, _default_local_budget)
 if CONTEXT_TOKEN_BUDGET < 0:
-    CONTEXT_TOKEN_BUDGET = 16384
+    CONTEXT_TOKEN_BUDGET = _default_local_budget
 
 _raw_gemini_ctx = os.environ.get("MACA_GEMINI_CONTEXT_WINDOW")
 GEMINI_CONTEXT_WINDOW: int = _parse_int_env(_raw_gemini_ctx, 50000)

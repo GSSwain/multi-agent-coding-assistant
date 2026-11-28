@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from maca import maca_config as config
 
-_CONTEXT_WINDOW_CACHE: Dict[Tuple[str, str], int] = {}
+_CONTEXT_WINDOW_CACHE: Dict[Tuple[str, str], Optional[int]] = {}
 _NUM_CTX_PATTERN = re.compile(r"\bnum_ctx\s+(\d+)\b")
 
 
@@ -22,6 +22,17 @@ def _get_ollama_num_ctx_env() -> Optional[int]:
     except ValueError:
         return None
     return parsed if parsed > 0 else None
+
+
+def _get_effective_ollama_num_ctx() -> Optional[int]:
+    """Return active Ollama num_ctx cap from env override or resolved config."""
+    env_ctx = _get_ollama_num_ctx_env()
+    if env_ctx is not None:
+        return env_ctx
+    cfg_ctx = getattr(config, "OLLAMA_NUM_CTX", 0)
+    if isinstance(cfg_ctx, int) and not isinstance(cfg_ctx, bool) and cfg_ctx > 0:
+        return cfg_ctx
+    return None
 
 
 def _parse_ollama_show_context_window(payload: Any) -> Optional[int]:
@@ -64,42 +75,39 @@ class LocalGemmaClient:
 
     def get_context_window(self) -> int:
         """Discover the allowed context window for this local Ollama model."""
-        ollama_num_ctx = _get_ollama_num_ctx_env()
+        env_num_ctx = _get_ollama_num_ctx_env()
         if config.MOCK_GEMMA_FALLBACK:
-            if ollama_num_ctx is not None:
-                return ollama_num_ctx
+            if env_num_ctx is not None:
+                return env_num_ctx
             return int(config.CONTEXT_TOKEN_BUDGET)
 
         cache_key: Tuple[str, str] = (str(self.url), str(self.model))
         if cache_key in _CONTEXT_WINDOW_CACHE:
-            return _CONTEXT_WINDOW_CACHE[cache_key]
-
-        discovered: Optional[int] = None
-        try:
-            show_url = f"{str(self.url).rstrip('/')}/api/show"
-            req = urllib.request.Request(
-                show_url,
-                data=json.dumps({"name": self.model}).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=3) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-            discovered = _parse_ollama_show_context_window(payload)
-        except Exception:
-            discovered = None
-
-        if discovered is not None and ollama_num_ctx is not None:
-            resolved = min(discovered, ollama_num_ctx)
-        elif discovered is not None:
-            resolved = discovered
-        elif ollama_num_ctx is not None:
-            resolved = ollama_num_ctx
+            discovered = _CONTEXT_WINDOW_CACHE[cache_key]
         else:
-            resolved = int(config.CONTEXT_TOKEN_BUDGET)
+            try:
+                show_url = f"{str(self.url).rstrip('/')}/api/show"
+                req = urllib.request.Request(
+                    show_url,
+                    data=json.dumps({"name": self.model}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=3) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                discovered = _parse_ollama_show_context_window(payload)
+            except Exception:
+                discovered = None
+            _CONTEXT_WINDOW_CACHE[cache_key] = discovered
 
-        _CONTEXT_WINDOW_CACHE[cache_key] = resolved
-        return resolved
+        effective_num_ctx = _get_effective_ollama_num_ctx()
+        if discovered is not None and effective_num_ctx is not None:
+            return min(discovered, effective_num_ctx)
+        if discovered is not None:
+            return discovered
+        if env_num_ctx is not None:
+            return env_num_ctx
+        return int(config.CONTEXT_TOKEN_BUDGET)
 
     def generate(self, prompt, system_instruction=""):
         if config.MOCK_GEMMA_FALLBACK:
