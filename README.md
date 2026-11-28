@@ -252,9 +252,9 @@ MACA uses Google Gemini and Anthropic Claude for medium and above tasks. For sec
   # Model-aware pre-flight context token budgeting
   # Global override (optional; forces cap across all models, or set 0 to disable)
   export MACA_CONTEXT_TOKEN_BUDGET="16384"
-  # Smart cloud context window defaults (no metadata API calls)
-  export MACA_GEMINI_CONTEXT_WINDOW="1048576"
-  export MACA_CLAUDE_CONTEXT_WINDOW="200000"
+  # Smart cloud context window defaults (50K guardrail; no metadata API calls)
+  export MACA_GEMINI_CONTEXT_WINDOW="50000"
+  export MACA_CLAUDE_CONTEXT_WINDOW="50000"
   # Fraction of context reserved for model output (clamped to 0.05..0.80, default: 0.30)
   export MACA_CONTEXT_OUTPUT_RESERVE_RATIO="0.30"
   # Toggle pre-flight token budgeting on/off (default: true)

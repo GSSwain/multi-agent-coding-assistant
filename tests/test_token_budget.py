@@ -358,12 +358,12 @@ class TestTokenBudget(unittest.TestCase):
         self.assertTrue(local_agent.last_budget_result.trimmed)
         self.assertEqual(local_agent.last_budget_result.max_context_tokens, 300)
 
-        # Large cloud model window (Gemini 1M) leaves the exact same prompt untouched
+        # Cloud model window (Gemini default 50K) leaves the exact same prompt untouched
         gemini_client = GeminiClient()
         cloud_agent = _DummyAgent(gemini_client, system_text="Cloud rules.")
         with mock.patch.object(config, "CONTEXT_BUDGET_ENABLED", True):
             with mock.patch.object(config, "CONTEXT_TOKEN_BUDGET_OVERRIDE", None):
-                with mock.patch.object(config, "GEMINI_CONTEXT_WINDOW", 1048576):
+                with mock.patch.object(config, "GEMINI_CONTEXT_WINDOW", 50000):
                     with mock.patch.object(
                         gemini_client, "generate", return_value="cloud_ok"
                     ) as cloud_gen:
@@ -374,7 +374,7 @@ class TestTokenBudget(unittest.TestCase):
         self.assertIsNotNone(cloud_agent.last_budget_result)
         assert cloud_agent.last_budget_result is not None
         self.assertFalse(cloud_agent.last_budget_result.trimmed)
-        self.assertEqual(cloud_agent.last_budget_result.max_context_tokens, 1048576)
+        self.assertEqual(cloud_agent.last_budget_result.max_context_tokens, 50000)
 
     def test_base_agent_explicit_override_forces_cap_or_disables(self):
         medium_prompt = f"HEAD: Task\n{'B' * 3000}\nTAIL: Done."

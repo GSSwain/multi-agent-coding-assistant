@@ -169,14 +169,14 @@ if CONTEXT_TOKEN_BUDGET < 0:
     CONTEXT_TOKEN_BUDGET = 16384
 
 _raw_gemini_ctx = os.environ.get("MACA_GEMINI_CONTEXT_WINDOW")
-GEMINI_CONTEXT_WINDOW: int = _parse_int_env(_raw_gemini_ctx, 1048576)
+GEMINI_CONTEXT_WINDOW: int = _parse_int_env(_raw_gemini_ctx, 50000)
 if GEMINI_CONTEXT_WINDOW <= 0:
-    GEMINI_CONTEXT_WINDOW = 1048576
+    GEMINI_CONTEXT_WINDOW = 50000
 
 _raw_claude_ctx = os.environ.get("MACA_CLAUDE_CONTEXT_WINDOW")
-CLAUDE_CONTEXT_WINDOW: int = _parse_int_env(_raw_claude_ctx, 200000)
+CLAUDE_CONTEXT_WINDOW: int = _parse_int_env(_raw_claude_ctx, 50000)
 if CLAUDE_CONTEXT_WINDOW <= 0:
-    CLAUDE_CONTEXT_WINDOW = 200000
+    CLAUDE_CONTEXT_WINDOW = 50000
 
 _raw_reserve_ratio = os.environ.get("MACA_CONTEXT_OUTPUT_RESERVE_RATIO")
 CONTEXT_OUTPUT_RESERVE_RATIO: float = _parse_float_env(_raw_reserve_ratio, 0.30)
