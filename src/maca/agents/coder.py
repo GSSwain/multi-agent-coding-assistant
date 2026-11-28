@@ -2,7 +2,7 @@ import difflib
 from typing import Any, Dict, List, Optional
 
 from maca.agents.base import BaseAgent
-from maca.todo import init_todo_file, read_todo_file, update_todo_progress
+from maca.todo import format_compact_todo, init_todo_file, read_todo_file, update_todo_progress
 
 
 class BaseCoderAgent(BaseAgent):
@@ -31,6 +31,16 @@ class BaseCoderAgent(BaseAgent):
         for filepath, content in repo_files_content.items():
             formatted_files += f"--- FILE: {filepath} ---\n{content}\n\n"
         return formatted_files
+
+    def _format_todo_context(self, todo_content: Optional[str]) -> str:
+        if not todo_content:
+            return ""
+        compact_todo = format_compact_todo(todo_content, min_completed_to_collapse=2)
+        return (
+            f"\n\nCurrent Todo Progress Checklist (.maca/<task>/coder.todo):\n{compact_todo}\n"
+            "CONTINUATION INSTRUCTION: Items marked [x] are ALREADY COMPLETED. Do NOT start over. "
+            "Continue the task based on the pending [ ] items and any nudge feedback above."
+        )
 
     def compute_file_blocks(
         self, files: Dict[str, str], repo_files_content: Optional[Dict[str, str]] = None
@@ -147,13 +157,7 @@ class SimpleCoderAgent(BaseCoderAgent):
     ) -> str:
         history_context = self._format_history(history)
         files_context = self._format_files_context(repo_files_content)
-        todo_context = ""
-        if todo_content:
-            todo_context = (
-                f"\n\nCurrent Todo Progress Checklist (.maca/<task>/coder.todo):\n{todo_content}\n"
-                "CONTINUATION INSTRUCTION: Items marked [x] are ALREADY COMPLETED. Do NOT start over. "
-                "Continue the task based on the pending [ ] items and any nudge feedback above."
-            )
+        todo_context = self._format_todo_context(todo_content)
 
         eff_allowed_dir = allowed_directory or getattr(self, "allowed_directory", ".")
         allowed_dir_context = ""
@@ -265,13 +269,7 @@ class SpecCoderAgent(BaseCoderAgent):
     ) -> str:
         history_context = self._format_history(history)
         files_context = self._format_files_context(repo_files_content)
-        todo_context = ""
-        if todo_content:
-            todo_context = (
-                f"\n\nCurrent Todo Progress Checklist (.maca/<task>/coder.todo):\n{todo_content}\n"
-                "CONTINUATION INSTRUCTION: Items marked [x] are ALREADY COMPLETED. Do NOT start over. "
-                "Continue the task based on the pending [ ] items and any nudge feedback above."
-            )
+        todo_context = self._format_todo_context(todo_content)
 
         eff_allowed_dir = allowed_directory or getattr(self, "allowed_directory", ".")
         allowed_dir_context = ""

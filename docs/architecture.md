@@ -168,6 +168,7 @@ To ensure reliable recovery and avoid re-executing already completed work during
 - The **CoderAgent** initializes `.maca/<task>/coder.todo` directly from the implementation plan or specification.
 - As files are generated and tasks are completed, the checklist entries transition from `- [ ]` to `- [x]`.
 - When nudged (e.g. by the completion verifier or reviewer), the agent receives its current `.todo` checklist and continuation instructions explicitly instructing it **not to start over**, but to resume execution starting from the pending tasks and nudge requirements.
+- **Compact `.todo` Prompt Formatting**: Before injecting `.maca/<task>/coder.todo` into coder continuation/nudge prompts, `format_compact_todo` (`src/maca/todo.py`) collapses completed `- [x]` items (when 2 or more steps are already done) into a concise 1-line progress header (`Completed: X/Y steps`) while preserving section headings and all remaining `- [ ]` items verbatim. The full checklist continues to be persisted on disk in `.maca/<task>/coder.todo`.
 
 ## Structured Context Management (`TaskContext`) & Allowed Directory
 To provide context engineering and explicit repository boundaries across agent invocations:
@@ -183,6 +184,7 @@ To provide context engineering and explicit repository boundaries across agent i
   - `todo_status`: Aggregated checklist status across all agents from `.maca/<task>/<agent>.todo`.
   - `agent_updates`: Status dictionary tracking completion (`completed: bool`) and details from each agent.
 - Every A2A call helper invocation passes this structured context, and each agent returns completion and update metadata back to the Orchestrator.
+- **Compact IPC Context Deduplication**: When `build_agent_payload` (`src/maca/stages/common.py`) constructs stage IPC payloads where `plan`, `spec`, or `plan_or_spec` are already provided as top-level payload keys, it serializes `payload["context"]` via `TaskContext.to_compact_dict(omit_plan=..., omit_spec=...)`. Omitted bodies are replaced with lightweight metadata (`plan_omitted`/`plan_chars` and `spec_omitted`/`spec_chars`) to avoid duplicating large plan/spec text across JSON-RPC messages, while `TaskContext.to_dict()` remains full and unchanged for `.maca/<task>/task.json` persistence.
 - **Strict Directory & Workspace Enforcement**: Every agent (via `BaseAgent.read_file`) and `WorkspaceManager.read_file` verify that any file read resides strictly under the `allowed_directory` (read-only boundary). For modifications, `BaseAgent.write_file` and `WorkspaceManager.write_file` / `apply_changes` verify that modifications reside strictly within the target `workspace` (`repo_path`), preventing sandbox escapes. Attempts to read outside `allowed_directory` or write outside `workspace` are automatically rejected.
 
 ---

@@ -3,6 +3,9 @@ import posixpath
 import re
 from typing import Any, Dict, List, Optional
 
+_COMPLETED_ITEM_RE = re.compile(r"^\s*-\s*\[[xX]\](?:\s+|$)")
+_PENDING_ITEM_RE = re.compile(r"^\s*-\s*\[ \](?:\s+|$)")
+
 
 def get_todo_path(repo_path: str, task_name: str, agent_name: str) -> str:
     """Returns the path to the agent's .todo file: .maca/<task>/<agent>.todo."""
@@ -206,3 +209,72 @@ def get_all_todo_statuses(repo_path: str, task_name: str) -> Dict[str, Any]:
         }
 
     return statuses
+
+
+def format_compact_todo(todo_content: str, min_completed_to_collapse: int = 1) -> str:
+    """Format a markdown checklist compactly by collapsing completed ``- [x]`` items.
+
+    When at least ``min_completed_to_collapse`` items are completed, completed
+    ``- [x]`` lines are collapsed into a single concise progress header
+    (``Completed: X/Y steps``) while preserving section headings, non-checklist
+    notes, and all remaining ``- [ ]`` items verbatim. If all items are done or
+    no checklist items exist, handles cleanly without losing information.
+    """
+    if not todo_content or not todo_content.strip():
+        return ""
+
+    stripped_content = todo_content.strip()
+    lines = stripped_content.splitlines()
+
+    completed_count = 0
+    pending_count = 0
+    for line in lines:
+        if _COMPLETED_ITEM_RE.match(line):
+            completed_count += 1
+        elif _PENDING_ITEM_RE.match(line):
+            pending_count += 1
+
+    total_count = completed_count + pending_count
+    if total_count == 0 or completed_count == 0 or completed_count < min_completed_to_collapse:
+        return stripped_content
+
+    if pending_count == 0:
+        progress_header = f"Completed: {completed_count}/{total_count} steps (all steps complete)"
+    else:
+        progress_header = f"Completed: {completed_count}/{total_count} steps"
+
+    kept_lines: List[str] = []
+    header_inserted = False
+    first_non_empty_seen = False
+
+    for line in lines:
+        if _COMPLETED_ITEM_RE.match(line):
+            continue
+
+        stripped = line.strip()
+        if not stripped:
+            if kept_lines and kept_lines[-1] != "":
+                kept_lines.append("")
+            continue
+
+        if not first_non_empty_seen:
+            first_non_empty_seen = True
+            if stripped.startswith("# "):
+                kept_lines.append(line)
+                continue
+
+        if not header_inserted:
+            kept_lines.append(progress_header)
+            header_inserted = True
+            if stripped.startswith("#"):
+                kept_lines.append("")
+
+        kept_lines.append(line)
+
+    if not header_inserted:
+        kept_lines.append(progress_header)
+
+    while kept_lines and kept_lines[-1] == "":
+        kept_lines.pop()
+
+    return "\n".join(kept_lines)
